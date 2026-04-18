@@ -10,10 +10,12 @@ const btnP: React.CSSProperties = { background:'#2563EB', color:'#fff', border:'
 const btnG: React.CSSProperties = { background:'transparent', color:'#6b6860', border:'1px solid rgba(0,0,0,0.14)', borderRadius:6, padding:'9px 18px', fontSize:13, cursor:'pointer', fontFamily:'Outfit,sans-serif' }
 const btnSm: React.CSSProperties = { padding:'5px 10px', fontSize:12, borderRadius:5, cursor:'pointer', fontFamily:'Outfit,sans-serif' }
 
-const ROLES = [
-  { value:'admin', label:'Administrateur', desc:'Gère toutes les opérations courantes', color:'#2563EB' },
-  { value:'employe', label:'Employé', desc:'Créer clients, factures et paiements', color:'#0d9488' },
-  { value:'lecteur', label:'Lecteur', desc:'Consultation uniquement — lecture seule', color:'#6b6860' },
+// Hiérarchie : superadmin > admin > employe > lecteur
+const ALL_ROLES = [
+  { value:'superadmin', label:'Super Admin', desc:'Contrôle total — Seul compte non supprimable', color:'#7c3aed', icon:'👑' },
+  { value:'admin', label:'Administrateur', desc:'Gère utilisateurs + opérations courantes', color:'#2563EB', icon:'⚙️' },
+  { value:'employe', label:'Employé', desc:'Créer clients, factures et paiements', color:'#0d9488', icon:'👤' },
+  { value:'lecteur', label:'Lecteur', desc:'Consultation uniquement — lecture seule', color:'#6b6860', icon:'👁️' },
 ]
 
 export default function UtilisateursPage() {
@@ -41,14 +43,28 @@ export default function UtilisateursPage() {
     setLoading(false)
   }
 
+  // Permissions
+  const isSuperAdmin = currentUser?.role === 'superadmin'
+  const isAdmin = currentUser?.role === 'admin'
+  const canAccess = isSuperAdmin || isAdmin
+
+  // Qu'est-ce que peut créer/modifier l'utilisateur courant ?
+  const creatableRoles = isSuperAdmin 
+    ? ALL_ROLES.filter(r => r.value !== 'superadmin')  // Super admin peut créer admin/employe/lecteur
+    : isAdmin 
+    ? ALL_ROLES.filter(r => r.value === 'employe' || r.value === 'lecteur')  // Admin peut créer employe/lecteur seulement
+    : []
+
   function openNew() {
     setEditing(null)
-    setForm({ full_name:'', username:'', email:'', phone:'', role:'employe', password:'', salary:'', hiring_date:'' })
+    setForm({ full_name:'', username:'', email:'', phone:'', role:creatableRoles[0]?.value||'employe', password:'', salary:'', hiring_date:'' })
     setError('')
     setShowForm(true)
   }
 
   function openEdit(u: any) {
+    // Admin ne peut pas modifier superadmin ni autre admin
+    if (isAdmin && (u.role === 'superadmin' || u.role === 'admin')) return
     setEditing(u)
     setForm({
       full_name: u.full_name||'', username: u.username||'', email: u.email||'',
@@ -63,7 +79,10 @@ export default function UtilisateursPage() {
     setError('')
     if (!form.full_name||!form.username) { setError('Nom et username obligatoires'); return }
     if (!editing && !form.password) { setError('Mot de passe obligatoire pour un nouvel utilisateur'); return }
-    if (form.role === 'superadmin') { setError('Impossible de créer un superadmin'); return }
+    if (form.role === 'superadmin') { setError('Impossible de créer un Super Admin'); return }
+    
+    // Admin ne peut créer que employe / lecteur
+    if (isAdmin && !['employe','lecteur'].includes(form.role)) { setError('Vous ne pouvez créer que des Employés ou Lecteurs'); return }
 
     setSaving(true)
     const data: any = {
@@ -75,7 +94,7 @@ export default function UtilisateursPage() {
       salary: parseFloat(form.salary)||0,
       hiring_date: form.hiring_date||null,
     }
-    if (!editing) data.password_hash = 'changeme'
+    if (!editing) data.password_hash = form.password  // TODO: hash en prod
     try {
       if (editing) {
         await supabase.from('users').update(data).eq('id', editing.id)
@@ -92,12 +111,21 @@ export default function UtilisateursPage() {
   }
 
   async function toggleActive(u: any) {
-    if (u.role === 'superadmin') return
+    if (u.role === 'superadmin') { alert('Le Super Admin ne peut jamais être désactivé'); return }
+    if (isAdmin && u.role === 'admin') { alert('Les admins ne peuvent pas désactiver d\'autres admins'); return }
     await supabase.from('users').update({ is_active: !u.is_active }).eq('id', u.id)
     fetch()
   }
 
-  if (currentUser && currentUser.role !== 'superadmin' && currentUser.role !== 'admin') {
+  async function deleteUser(u: any) {
+    if (u.role === 'superadmin') { alert('Le Super Admin ne peut jamais être supprimé'); return }
+    if (!isSuperAdmin && u.role === 'admin') { alert('Seul le Super Admin peut supprimer un Admin'); return }
+    if (!confirm(`Supprimer définitivement ${u.full_name} ?\n\nCette action est irréversible.`)) return
+    await supabase.from('users').delete().eq('id', u.id)
+    fetch()
+  }
+
+  if (!canAccess) {
     return (
       <div style={{textAlign:'center',padding:60,color:'#a8a69e'}}>
         <div style={{fontSize:40,marginBottom:14}}>🔒</div>
@@ -115,9 +143,9 @@ export default function UtilisateursPage() {
 
   const totalSalaires = users.filter(u => u.is_active).reduce((s,u) => s + (u.salary||0), 0)
 
-  const roleColor = (r: string) => ROLES.find(x=>x.value===r)?.color || (r==='superadmin' ? '#7c3aed' : '#6b6860')
+  const roleInfo = (r: string) => ALL_ROLES.find(x=>x.value===r) || { color:'#6b6860', label:r, icon:'?' }
 
-  // ===== FULL SCREEN FORM =====
+  // ===== FORM FULL SCREEN =====
   if (showForm) {
     return (
       <div style={{minHeight:'100vh',background:'#f5f4f1',margin:-22,padding:0,fontFamily:'Outfit,sans-serif'}}>
@@ -139,10 +167,9 @@ export default function UtilisateursPage() {
           </div>
         </div>
 
-        <div style={{maxWidth:780,margin:'0 auto',padding:'32px 24px'}}>
+        <div style={{maxWidth:820,margin:'0 auto',padding:'32px 24px'}}>
           {error && <div style={{background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.2)',borderRadius:8,padding:'12px 14px',fontSize:13,color:'#dc2626',marginBottom:20}}>{error}</div>}
 
-          {/* IDENTITY */}
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px',marginBottom:16}}>
             <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:14}}>Identité</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
@@ -169,13 +196,16 @@ export default function UtilisateursPage() {
             </div>
           </div>
 
-          {/* ROLE */}
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px',marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:14}}>Rôle & Permissions</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
-              {ROLES.map(r=>(
+            <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:4}}>Rôle & Permissions</div>
+            <div style={{fontSize:11,color:'#a8a69e',marginBottom:14}}>
+              {isSuperAdmin ? 'En tant que Super Admin, vous pouvez créer tous les rôles sauf Super Admin' : 'En tant qu\'Administrateur, vous pouvez créer uniquement des Employés ou Lecteurs'}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:`repeat(${creatableRoles.length},1fr)`,gap:10}}>
+              {creatableRoles.map(r=>(
                 <button key={r.value} onClick={()=>setForm({...form,role:r.value})}
                   style={{padding:'16px',borderRadius:10,border:`2px solid ${form.role===r.value?r.color:'rgba(0,0,0,0.1)'}`,background:form.role===r.value?`${r.color}0f`:'#fff',cursor:'pointer',textAlign:'left',fontFamily:'Outfit,sans-serif'}}>
+                  <div style={{fontSize:22,marginBottom:6}}>{r.icon}</div>
                   <div style={{fontSize:13,fontWeight:700,color:form.role===r.value?r.color:'#1a1916',marginBottom:4}}>{r.label}</div>
                   <div style={{fontSize:11,color:'#6b6860',lineHeight:1.4}}>{r.desc}</div>
                 </button>
@@ -183,7 +213,6 @@ export default function UtilisateursPage() {
             </div>
           </div>
 
-          {/* EMPLOI */}
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px',marginBottom:16}}>
             <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:14}}>Informations emploi</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
@@ -216,9 +245,9 @@ export default function UtilisateursPage() {
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:12}}>
         <div>
           <div style={{fontSize:17,fontWeight:600,letterSpacing:'-.3px'}}>Utilisateurs</div>
-          <div style={{fontSize:12,color:'#a8a69e',marginTop:2}}>{users.length} utilisateur(s) · {users.filter(u=>u.is_active).length} actif(s)</div>
+          <div style={{fontSize:12,color:'#a8a69e',marginTop:2}}>{users.length} utilisateur(s) · {users.filter(u=>u.is_active).length} actif(s) · Connecté en tant que <strong style={{color:roleInfo(currentUser?.role).color}}>{roleInfo(currentUser?.role).label}</strong></div>
         </div>
-        {currentUser?.role === 'superadmin' && (
+        {creatableRoles.length > 0 && (
           <button style={btnP} onClick={openNew}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nouvel utilisateur
@@ -248,14 +277,14 @@ export default function UtilisateursPage() {
         {['tous','superadmin','admin','employe','lecteur'].map(r=>(
           <button key={r} onClick={()=>setRoleFilter(r)}
             style={{...btnSm,border:'1px solid rgba(0,0,0,0.14)',background:roleFilter===r?'#2563EB':'#fff',color:roleFilter===r?'#fff':'#6b6860'}}>
-            {r==='tous'?'Tous':r.charAt(0).toUpperCase()+r.slice(1)}
+            {r==='tous'?'Tous':roleInfo(r).label}
           </button>
         ))}
       </div>
 
       <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.08)',borderRadius:8,overflow:'hidden'}}>
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:800}}>
             <thead>
               <tr>{['Utilisateur','Rôle','Contact','Salaire','Embauche','Statut','Actions'].map(h=>(
                 <th key={h} style={{fontSize:11,fontWeight:600,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.4px',padding:'9px 14px',borderBottom:'1px solid rgba(0,0,0,0.08)',textAlign:'left',whiteSpace:'nowrap',background:'#f0eeea'}}>{h}</th>
@@ -264,47 +293,56 @@ export default function UtilisateursPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Chargement...</td></tr>
-              ) : filtered.map(u => (
-                <tr key={u.id} style={{borderBottom:'1px solid rgba(0,0,0,0.05)'}}>
-                  <td style={{padding:'12px 14px'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <div style={{width:34,height:34,borderRadius:'50%',background:`${roleColor(u.role)}15`,color:roleColor(u.role),display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
-                        {u.full_name?.split(' ').map((w:string)=>w[0]).slice(0,2).join('')}
+              ) : filtered.map(u => {
+                const info = roleInfo(u.role)
+                const canEdit = isSuperAdmin || (isAdmin && u.role !== 'superadmin' && u.role !== 'admin')
+                const canDelete = isSuperAdmin && u.role !== 'superadmin'
+                const canToggle = isSuperAdmin ? u.role !== 'superadmin' : (u.role === 'employe' || u.role === 'lecteur')
+                
+                return (
+                  <tr key={u.id} style={{borderBottom:'1px solid rgba(0,0,0,0.05)'}}>
+                    <td style={{padding:'12px 14px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:10}}>
+                        <div style={{width:34,height:34,borderRadius:'50%',background:`${info.color}15`,color:info.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
+                          {u.full_name?.split(' ').map((w:string)=>w[0]).slice(0,2).join('')}
+                        </div>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+                            {u.full_name}
+                            {u.id === currentUser?.id && <span style={{fontSize:9,background:'rgba(37,99,235,0.1)',color:'#2563EB',padding:'2px 6px',borderRadius:4,fontWeight:600}}>VOUS</span>}
+                          </div>
+                          <div style={{fontSize:11,color:'#a8a69e',marginTop:1}}>@{u.username}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:600}}>{u.full_name}</div>
-                        <div style={{fontSize:11,color:'#a8a69e',marginTop:1}}>@{u.username}</div>
+                    </td>
+                    <td style={{padding:'12px 14px'}}>
+                      <span style={{fontSize:11,background:`${info.color}15`,color:info.color,padding:'3px 9px',borderRadius:4,fontWeight:600,border:`1px solid ${info.color}30`,display:'inline-flex',alignItems:'center',gap:5}}>
+                        <span>{info.icon}</span>
+                        {info.label}
+                      </span>
+                    </td>
+                    <td style={{padding:'12px 14px',fontSize:12}}>
+                      {u.email && <div style={{color:'#6b6860'}}>{u.email}</div>}
+                      {u.phone && <div style={{color:'#a8a69e',marginTop:2}}>{u.phone}</div>}
+                    </td>
+                    <td style={{padding:'12px 14px',fontFamily:'JetBrains Mono,monospace',fontSize:12}}>{u.salary?dzd(u.salary):'—'}</td>
+                    <td style={{padding:'12px 14px',fontSize:12,color:'#6b6860'}}>{u.hiring_date?new Date(u.hiring_date).toLocaleDateString('fr-DZ'):'—'}</td>
+                    <td style={{padding:'12px 14px'}}>
+                      <span style={{fontSize:11,padding:'3px 9px',borderRadius:4,fontWeight:600,background:u.is_active?'rgba(22,163,74,0.1)':'rgba(220,38,38,0.08)',color:u.is_active?'#15803d':'#dc2626'}}>
+                        {u.is_active?'● Actif':'○ Inactif'}
+                      </span>
+                    </td>
+                    <td style={{padding:'12px 14px'}}>
+                      <div style={{display:'flex',gap:5}}>
+                        {canEdit && <button style={{...btnSm,background:'transparent',color:'#6b6860',border:'1px solid rgba(0,0,0,0.14)'}} onClick={()=>openEdit(u)}>Modifier</button>}
+                        {canToggle && u.id !== currentUser?.id && <button style={{...btnSm,background:u.is_active?'rgba(217,119,6,0.08)':'rgba(22,163,74,0.08)',color:u.is_active?'#d97706':'#16a34a',border:`1px solid ${u.is_active?'rgba(217,119,6,0.15)':'rgba(22,163,74,0.15)'}`}} onClick={()=>toggleActive(u)}>{u.is_active?'Désactiver':'Activer'}</button>}
+                        {canDelete && <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>deleteUser(u)}>Supprimer</button>}
+                        {u.role === 'superadmin' && <span style={{fontSize:10,color:'#a8a69e',fontStyle:'italic'}}>🔒 Protégé</span>}
                       </div>
-                    </div>
-                  </td>
-                  <td style={{padding:'12px 14px'}}>
-                    <span style={{fontSize:11,background:`${roleColor(u.role)}15`,color:roleColor(u.role),padding:'3px 9px',borderRadius:4,fontWeight:600,border:`1px solid ${roleColor(u.role)}30`}}>{u.role}</span>
-                  </td>
-                  <td style={{padding:'12px 14px',fontSize:12}}>
-                    {u.email && <div style={{color:'#6b6860'}}>{u.email}</div>}
-                    {u.phone && <div style={{color:'#a8a69e',marginTop:2}}>{u.phone}</div>}
-                  </td>
-                  <td style={{padding:'12px 14px',fontFamily:'JetBrains Mono,monospace',fontSize:12}}>{u.salary?dzd(u.salary):'—'}</td>
-                  <td style={{padding:'12px 14px',fontSize:12,color:'#6b6860'}}>{u.hiring_date?new Date(u.hiring_date).toLocaleDateString('fr-DZ'):'—'}</td>
-                  <td style={{padding:'12px 14px'}}>
-                    <span style={{fontSize:11,padding:'3px 9px',borderRadius:4,fontWeight:600,background:u.is_active?'rgba(22,163,74,0.1)':'rgba(220,38,38,0.08)',color:u.is_active?'#15803d':'#dc2626'}}>
-                      {u.is_active?'● Actif':'○ Inactif'}
-                    </span>
-                  </td>
-                  <td style={{padding:'12px 14px'}}>
-                    <div style={{display:'flex',gap:5}}>
-                      {u.role !== 'superadmin' && currentUser?.role === 'superadmin' && (
-                        <>
-                          <button style={{...btnSm,background:'transparent',color:'#6b6860',border:'1px solid rgba(0,0,0,0.14)'}} onClick={()=>openEdit(u)}>Modifier</button>
-                          <button style={{...btnSm,background:u.is_active?'rgba(220,38,38,0.08)':'rgba(22,163,74,0.08)',color:u.is_active?'#dc2626':'#16a34a',border:`1px solid ${u.is_active?'rgba(220,38,38,0.15)':'rgba(22,163,74,0.15)'}`}} onClick={()=>toggleActive(u)}>
-                            {u.is_active?'Désactiver':'Activer'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

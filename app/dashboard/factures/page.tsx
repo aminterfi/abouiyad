@@ -208,200 +208,308 @@ function ProductSelect({ products, value, onChange, onAdd }: any) {
   )
 }
 
-// ===== PDF GENERATOR =====
-function generatePDF(bill: any, items: any[], settings: any, payments: any[] = []) {
-  const win = window.open('', '_blank', 'width=800,height=900')
-  if (!win) { alert('Veuillez autoriser les popups'); return }
+// ===== PDF FACTURE =====
+async function generatePDF(bill: any, settings: any) {
+  // Fetch fresh data
+  const [{ data: items }, { data: pays }, { data: freshSettings }] = await Promise.all([
+    supabase.from('bill_items').select('*, products(name, description)').eq('bill_id', bill.id),
+    supabase.from('payments').select('*, users:created_by(full_name)').eq('bill_id', bill.id).order('created_at', { ascending: true }),
+    supabase.from('settings').select('*').single()
+  ])
+  const s = freshSettings || settings || {}
+  const allItems = items || []
+  const allPays = pays || []
 
-  const totalHT = items.reduce((s,i)=>s+(i.quantity*i.unit_price),0)
-  const tva = totalHT * (settings?.tva_rate||19) / 100
-  const color = settings?.primary_color||'#2563EB'
+  const win = window.open('', '_blank', 'width=850,height=950')
+  if (!win) { alert('Veuillez autoriser les popups pour télécharger le PDF'); return }
 
-  win.document.write(`
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>${bill.invoice_number}</title>
+  const totalHT = allItems.reduce((sum: number, i: any) => sum + (i.quantity * i.unit_price), 0)
+  const tvaRate = s.tva_rate || 19
+  const tva = totalHT * tvaRate / 100
+  const color = s.primary_color || '#2563EB'
+  const company = s.company_name || 'ABOU IYAD'
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>${bill.invoice_number} - ${company}</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-body{background:#f5f5f5;padding:20px}
-.page{background:#fff;max-width:210mm;margin:0 auto;padding:40px;box-shadow:0 4px 12px rgba(0,0,0,0.08)}
-.header{display:flex;justify-content:space-between;border-bottom:3px solid ${color};padding-bottom:20px;margin-bottom:30px}
-.company h1{font-size:22px;color:${color};margin-bottom:4px}
-.company p{font-size:11px;color:#666;line-height:1.5}
-.doc-info{text-align:right}
-.doc-info h2{font-size:26px;color:#1a1916;margin-bottom:6px;letter-spacing:1px}
-.doc-info .num{font-family:monospace;color:${color};font-weight:700;font-size:14px}
-.doc-info .date{font-size:11px;color:#666;margin-top:4px}
-.status{display:inline-block;padding:4px 12px;border-radius:12px;font-size:10px;font-weight:700;margin-top:6px}
-.status.paid{background:#dcfce7;color:#15803d}
-.status.partial{background:#fef3c7;color:#b45309}
-.status.unpaid{background:#fee2e2;color:#dc2626}
-.client-block{background:#f8f7f5;padding:16px;border-radius:6px;margin-bottom:24px;border-left:3px solid ${color}}
-.client-block h3{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.client-block .name{font-size:15px;font-weight:700;color:#1a1916;margin-bottom:4px}
-.client-block .detail{font-size:11px;color:#666;margin:2px 0}
-table{width:100%;border-collapse:collapse;margin-bottom:20px}
-thead th{background:${color};color:#fff;padding:10px 8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}
+body{background:#f5f5f5;padding:20px;color:#1a1916}
+.page{background:#fff;max-width:210mm;margin:0 auto;padding:45px;box-shadow:0 4px 20px rgba(0,0,0,0.1);border-radius:4px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid ${color};padding-bottom:22px;margin-bottom:30px}
+.company-info h1{font-size:24px;color:${color};margin-bottom:6px;letter-spacing:-0.5px;font-weight:700}
+.company-info .tagline{font-size:10px;color:${color};opacity:0.8;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:600}
+.company-info p{font-size:11px;color:#555;line-height:1.6}
+.doc-info{text-align:right;min-width:220px}
+.doc-info h2{font-size:32px;color:#1a1916;margin-bottom:8px;letter-spacing:2px;font-weight:700}
+.doc-info .num{font-family:'Courier New',monospace;color:${color};font-weight:700;font-size:15px;background:${color}15;padding:6px 12px;border-radius:6px;display:inline-block;margin-bottom:6px}
+.doc-info .dates{font-size:11px;color:#666;line-height:1.8;margin-top:8px}
+.doc-info .dates strong{color:#1a1916}
+.status-tag{display:inline-block;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;margin-top:10px;text-transform:uppercase;letter-spacing:0.5px}
+.status-tag.paid{background:#dcfce7;color:#15803d;border:1px solid #86efac}
+.status-tag.partial{background:#fef3c7;color:#b45309;border:1px solid #fcd34d}
+.status-tag.unpaid{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+.client-section{background:#fafaf8;border-left:4px solid ${color};padding:18px 22px;border-radius:6px;margin-bottom:26px}
+.client-section .label{font-size:10px;color:${color};text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:8px}
+.client-section .name{font-size:16px;font-weight:700;color:#1a1916;margin-bottom:6px}
+.client-section .detail{font-size:12px;color:#555;margin:3px 0;display:flex;align-items:center;gap:8px}
+table{width:100%;border-collapse:collapse;margin-bottom:24px;border-radius:6px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+thead th{background:${color};color:#fff;padding:12px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.8px;font-weight:600}
 thead th.right{text-align:right}
-tbody td{padding:10px 8px;border-bottom:1px solid #eee;font-size:12px}
-tbody td.right{text-align:right;font-family:monospace}
-tbody tr:last-child td{border-bottom:2px solid #ddd}
-.totals{display:flex;justify-content:flex-end;margin-bottom:30px}
-.totals-box{min-width:260px}
-.totals-box .row{display:flex;justify-content:space-between;padding:8px 14px;font-size:12px}
-.totals-box .row.sub{color:#666;border-bottom:1px solid #eee}
-.totals-box .row.total{background:${color};color:#fff;font-weight:700;font-size:15px;border-radius:4px;margin-top:6px}
-.totals-box .row .mono{font-family:monospace}
-.payments-section{background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;padding:14px;margin-bottom:20px}
-.payments-section h3{font-size:12px;color:${color};margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
-.payment-row{display:flex;justify-content:space-between;padding:5px 0;font-size:11px;border-bottom:1px solid #dbeafe}
-.payment-row:last-child{border-bottom:none;padding-top:8px;font-weight:700}
-.footer{border-top:2px solid ${color};padding-top:16px;margin-top:30px;font-size:10px;color:#888;text-align:center;line-height:1.6}
-.footer strong{color:#1a1916}
-.dev-credit{margin-top:14px;font-size:9px;color:#bbb}
-@media print {body{background:#fff;padding:0}.page{box-shadow:none}.no-print{display:none}}
-.print-bar{position:fixed;top:12px;right:12px;display:flex;gap:8px;z-index:100}
-.print-bar button{padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-family:Arial}
-.btn-print{background:${color};color:#fff}
-.btn-close{background:#fff;border:1px solid #ddd;color:#666}
-</style>
-</head>
-<body>
-<div class="print-bar no-print">
-  <button class="btn-print" onclick="window.print()">🖨 Imprimer / PDF</button>
+tbody td{padding:12px 14px;border-bottom:1px solid #eee;font-size:12px;background:#fff}
+tbody td.right{text-align:right;font-family:'Courier New',monospace;font-weight:600}
+tbody tr:nth-child(even) td{background:#fafaf8}
+tbody tr:last-child td{border-bottom:none}
+.totals-block{display:flex;justify-content:flex-end;margin-bottom:30px}
+.totals-box{min-width:300px;background:#fafaf8;border-radius:8px;overflow:hidden;border:1px solid #e5e5e5}
+.totals-box .row{display:flex;justify-content:space-between;padding:10px 18px;font-size:13px}
+.totals-box .row.sub{color:#555}
+.totals-box .row.sub:not(:last-child){border-bottom:1px solid #eee}
+.totals-box .row.total{background:${color};color:#fff;font-weight:700;font-size:16px;padding:14px 18px;letter-spacing:0.3px}
+.totals-box .mono{font-family:'Courier New',monospace}
+.payments-section{background:linear-gradient(135deg,${color}08,${color}04);border:1px solid ${color}20;border-radius:8px;padding:18px 22px;margin-bottom:24px}
+.payments-section h3{font-size:12px;color:${color};margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;font-weight:700;display:flex;align-items:center;gap:8px}
+.payment-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;font-size:12px;border-bottom:1px solid ${color}15}
+.payment-row:last-child{border-bottom:none;padding-top:12px;margin-top:6px;border-top:2px solid ${color}30;font-weight:700;font-size:14px}
+.payment-row .method-pill{background:${color}15;color:${color};padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px}
+.payment-row .ref{font-family:'Courier New',monospace;font-size:10px;color:#888;margin-left:8px}
+.payment-amount{font-family:'Courier New',monospace;font-weight:700;color:#15803d}
+.balance-box{background:${bill.total_amount - bill.paid_amount > 0 ? '#fff7ed' : '#f0fdf4'};border:2px solid ${bill.total_amount - bill.paid_amount > 0 ? '#fb923c' : '#22c55e'};border-radius:8px;padding:14px 20px;text-align:center;margin-bottom:24px}
+.balance-box .label{font-size:11px;color:${bill.total_amount - bill.paid_amount > 0 ? '#b45309' : '#15803d'};text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px}
+.balance-box .val{font-size:24px;font-family:'Courier New',monospace;font-weight:700;color:${bill.total_amount - bill.paid_amount > 0 ? '#d97706' : '#15803d'}}
+.footer{border-top:2px solid ${color};padding-top:18px;margin-top:40px;font-size:10px;color:#777;text-align:center;line-height:1.8}
+.footer .conditions{font-size:11px;color:#555;margin-bottom:14px;font-style:italic}
+.footer .company-foot{font-weight:600;color:#1a1916;font-size:11px}
+.dev-credit{margin-top:10px;font-size:9px;color:#bbb;border-top:1px solid #eee;padding-top:10px}
+.dev-credit strong{color:${color}}
+@media print {body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.no-print{display:none !important}}
+.toolbar{position:fixed;top:15px;right:15px;display:flex;gap:10px;z-index:100;background:#fff;padding:10px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15)}
+.toolbar button{padding:9px 18px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-family:Arial;font-weight:600}
+.btn-print{background:${color};color:#fff}.btn-print:hover{opacity:0.9}
+.btn-close{background:#f5f5f5;color:#666;border:1px solid #ddd}
+</style></head><body>
+<div class="toolbar no-print">
+  <button class="btn-print" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
   <button class="btn-close" onclick="window.close()">✕ Fermer</button>
 </div>
 <div class="page">
   <div class="header">
-    <div class="company">
-      <h1>${settings?.company_name||'ABOU IYAD'}</h1>
+    <div class="company-info">
+      <h1>${company}</h1>
+      <div class="tagline">Développé par RS Comptabilité</div>
       <p>
-        ${settings?.address||''}<br>
-        ${settings?.phone ? `Tél : ${settings.phone} ` : ''} ${settings?.email ? ` · ${settings.email}` : ''}<br>
-        ${settings?.tax_number ? `NIF/RC : ${settings.tax_number}` : ''}
+        ${s.address ? `${s.address}<br>` : ''}
+        ${s.phone ? `📞 ${s.phone}` : ''} ${s.email ? ` · ✉ ${s.email}` : ''}<br>
+        ${s.website ? `🌐 ${s.website}<br>` : ''}
+        ${s.tax_number ? `<strong>NIF/RC :</strong> ${s.tax_number}` : ''}
       </p>
     </div>
     <div class="doc-info">
       <h2>FACTURE</h2>
       <div class="num">${bill.invoice_number}</div>
-      <div class="date">Date : ${new Date(bill.created_at).toLocaleDateString('fr-DZ')}</div>
-      <div class="status ${bill.status==='payé'?'paid':bill.status==='partiel'?'partial':'unpaid'}">${bill.status.toUpperCase()}</div>
+      <div class="dates">
+        <strong>Émise le :</strong> ${new Date(bill.created_at).toLocaleDateString('fr-DZ', { day: '2-digit', month: 'long', year: 'numeric' })}<br>
+      </div>
+      <div class="status-tag ${bill.status === 'payé' ? 'paid' : bill.status === 'partiel' ? 'partial' : 'unpaid'}">
+        ${bill.status === 'payé' ? '● Payée' : bill.status === 'partiel' ? '◐ Partielle' : '○ Impayée'}
+      </div>
     </div>
   </div>
-  <div class="client-block">
-    <h3>Facturé à</h3>
-    <div class="name">${bill.clients?.full_name||''}</div>
-    ${bill.clients?.email?`<div class="detail">✉ ${bill.clients.email}</div>`:''}
-    ${bill.clients?.phone?`<div class="detail">☎ ${bill.clients.phone}</div>`:''}
-    ${bill.clients?.address?`<div class="detail">📍 ${bill.clients.address}${bill.clients.wilaya?`, ${bill.clients.wilaya}`:''}</div>`:''}
+
+  <div class="client-section">
+    <div class="label">Facturé à</div>
+    <div class="name">${bill.clients?.full_name || ''}</div>
+    ${bill.clients?.email ? `<div class="detail">✉ ${bill.clients.email}</div>` : ''}
+    ${bill.clients?.phone ? `<div class="detail">☎ ${bill.clients.phone}</div>` : ''}
+    ${bill.clients?.address || bill.clients?.wilaya ? `<div class="detail">📍 ${bill.clients.address || ''}${bill.clients.wilaya ? `, ${bill.clients.wilaya}` : ''}</div>` : ''}
   </div>
+
   <table>
-    <thead>
-      <tr><th>Désignation</th><th class="right">Qté</th><th class="right">Prix HT</th><th class="right">Total HT</th></tr>
-    </thead>
+    <thead><tr><th style="width:50%">Désignation</th><th class="right">Qté</th><th class="right">Prix HT</th><th class="right">Total HT</th></tr></thead>
     <tbody>
-      ${items.length === 0 ? '<tr><td colspan="4" style="text-align:center;color:#999;padding:20px">Aucune ligne détaillée — Voir montant total ci-dessous</td></tr>' : items.map(i=>`
-        <tr><td>${i.products?.name||'Article'}</td><td class="right">${i.quantity}</td><td class="right">${dzdShort(i.unit_price)}</td><td class="right">${dzdShort(i.total)}</td></tr>
+      ${allItems.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:#999;padding:30px;font-style:italic">Facture globale — Voir montant total ci-dessous</td></tr>` : allItems.map((i: any) => `
+        <tr>
+          <td><strong>${i.products?.name || 'Article'}</strong>${i.products?.description ? `<br><span style="font-size:10px;color:#888">${i.products.description}</span>` : ''}</td>
+          <td class="right">${i.quantity}</td>
+          <td class="right">${i.unit_price.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</td>
+          <td class="right">${i.total.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</td>
+        </tr>
       `).join('')}
     </tbody>
   </table>
-  <div class="totals">
+
+  <div class="totals-block">
     <div class="totals-box">
-      ${items.length > 0 ? `
-      <div class="row sub"><span>Sous-total HT</span><span class="mono">${dzd(totalHT)}</span></div>
-      <div class="row sub"><span>TVA (${settings?.tva_rate||19}%)</span><span class="mono">${dzd(tva)}</span></div>` : ''}
-      <div class="row total"><span>TOTAL TTC</span><span class="mono">${dzd(bill.total_amount)}</span></div>
+      ${allItems.length > 0 ? `
+        <div class="row sub"><span>Sous-total HT</span><span class="mono">${totalHT.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+        <div class="row sub"><span>TVA (${tvaRate}%)</span><span class="mono">${tva.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+      ` : ''}
+      <div class="row total"><span>TOTAL TTC</span><span class="mono">${bill.total_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
     </div>
   </div>
-  ${payments.length > 0 ? `
-  <div class="payments-section">
-    <h3>Historique des paiements (${payments.length})</h3>
-    ${payments.map(p=>`
+
+  ${allPays.length > 0 ? `
+    <div class="payments-section">
+      <h3>💳 Historique des règlements (${allPays.length})</h3>
+      ${allPays.map((p: any) => `
+        <div class="payment-row">
+          <div>
+            <span class="method-pill">${p.method}</span>
+            <span style="margin-left:10px">${new Date(p.created_at).toLocaleDateString('fr-DZ')}</span>
+            <span class="ref">Réf: ${p.id.slice(0, 8).toUpperCase()}</span>
+          </div>
+          <span class="payment-amount">+${p.amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span>
+        </div>
+      `).join('')}
       <div class="payment-row">
-        <span>${new Date(p.created_at).toLocaleDateString('fr-DZ')} · ${p.method}</span>
-        <span class="mono">+${dzd(p.amount)}</span>
+        <span>Total encaissé</span>
+        <span class="payment-amount" style="font-size:16px">${bill.paid_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span>
       </div>
-    `).join('')}
-    <div class="payment-row"><span>Total encaissé</span><span class="mono">${dzd(bill.paid_amount)}</span></div>
-    <div class="payment-row" style="color:${bill.total_amount-bill.paid_amount>0?'#d97706':'#16a34a'}"><span>Solde restant</span><span class="mono">${dzd(bill.total_amount-bill.paid_amount)}</span></div>
-  </div>` : ''}
+    </div>
+  ` : ''}
+
+  ${bill.total_amount - bill.paid_amount > 0 ? `
+    <div class="balance-box">
+      <div class="label">Solde restant à régler</div>
+      <div class="val">${(bill.total_amount - bill.paid_amount).toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</div>
+    </div>
+  ` : `
+    <div class="balance-box">
+      <div class="label">✓ Facture entièrement réglée</div>
+      <div class="val">MERCI</div>
+    </div>
+  `}
+
   <div class="footer">
-    ${settings?.footer_text||'Merci de votre confiance'}
-    <div class="dev-credit">Document généré par ABOU IYAD — Développé par RS Comptabilité</div>
+    <div class="conditions">${s.footer_text || 'Merci de votre confiance. Paiement par virement sous 15 jours.'}</div>
+    <div class="company-foot">${company}${s.phone ? ` · ${s.phone}` : ''}${s.email ? ` · ${s.email}` : ''}</div>
+    <div class="dev-credit">
+      Document généré le ${new Date().toLocaleString('fr-DZ')}<br>
+      Système de gestion <strong>${company}</strong> — Développé par <strong>RS Comptabilité</strong>
+    </div>
   </div>
 </div>
-</body>
-</html>
-  `)
+</body></html>`)
   win.document.close()
 }
 
-function generateReceiptPDF(payment: any, bill: any, settings: any) {
-  const win = window.open('', '_blank', 'width=700,height=800')
+// ===== PDF RECU PAIEMENT =====
+async function generateReceiptPDF(payment: any, bill: any, settings: any) {
+  // Fetch fresh data
+  const [{ data: freshBill }, { data: freshSettings }, { data: paidUser }] = await Promise.all([
+    supabase.from('bills').select('*, clients(full_name,email,phone,address,wilaya)').eq('id', bill.id).single(),
+    supabase.from('settings').select('*').single(),
+    payment.created_by ? supabase.from('users').select('full_name').eq('id', payment.created_by).single() : Promise.resolve({ data: null })
+  ])
+  const s = freshSettings || settings || {}
+  const b = freshBill || bill
+  const enregistrePar = paidUser?.full_name || 'Système'
+
+  const win = window.open('', '_blank', 'width=750,height=900')
   if (!win) { alert('Veuillez autoriser les popups'); return }
-  const color = settings?.primary_color||'#2563EB'
-  win.document.write(`
-<!DOCTYPE html>
-<html lang="fr">
-<head><meta charset="UTF-8"><title>Reçu ${payment.id?.slice(0,8)}</title>
+  const color = s.primary_color || '#2563EB'
+  const company = s.company_name || 'ABOU IYAD'
+  const refNum = payment.id?.slice(0, 8).toUpperCase() || 'XXXXXX'
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>Reçu ${refNum} - ${company}</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-body{background:#f5f5f5;padding:20px}
-.page{background:#fff;max-width:150mm;margin:0 auto;padding:30px;box-shadow:0 4px 12px rgba(0,0,0,0.08)}
-.header{background:${color};color:#fff;padding:20px;margin:-30px -30px 24px;text-align:center}
-.header h1{font-size:22px;margin-bottom:4px}
-.header p{font-size:11px;opacity:0.9}
-.big-amount{background:#f0fdf4;border:2px dashed #16a34a;border-radius:8px;padding:24px;text-align:center;margin-bottom:20px}
-.big-amount .label{font-size:11px;color:#16a34a;text-transform:uppercase;font-weight:700;letter-spacing:1px;margin-bottom:6px}
-.big-amount .val{font-size:32px;color:#15803d;font-family:monospace;font-weight:700}
-.info-block{background:#f8f7f5;border-radius:6px;padding:14px;margin-bottom:12px}
-.info-row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid #eee}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}
+body{background:#f5f5f5;padding:20px;color:#1a1916}
+.page{background:#fff;max-width:160mm;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,0.1);border-radius:8px;overflow:hidden}
+.header{background:linear-gradient(135deg,${color},${color}dd);color:#fff;padding:30px;text-align:center;position:relative}
+.header::after{content:'';position:absolute;bottom:-10px;left:50%;transform:translateX(-50%) rotate(45deg);width:20px;height:20px;background:linear-gradient(135deg,${color}dd,${color})}
+.header h1{font-size:22px;margin-bottom:6px;letter-spacing:-0.3px}
+.header .tagline{font-size:10px;opacity:0.9;text-transform:uppercase;letter-spacing:2px;font-weight:600;margin-bottom:14px}
+.header h2{font-size:14px;background:rgba(255,255,255,0.2);display:inline-block;padding:6px 20px;border-radius:20px;letter-spacing:3px;font-weight:600}
+.content{padding:30px}
+.ref-number{text-align:center;margin-bottom:20px;color:#999;font-size:11px;font-family:'Courier New',monospace;letter-spacing:1.5px}
+.ref-number strong{color:${color};font-size:13px;background:${color}15;padding:4px 12px;border-radius:6px;margin-left:6px}
+.big-amount{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:3px dashed #16a34a;border-radius:12px;padding:28px;text-align:center;margin-bottom:24px;position:relative}
+.big-amount::before{content:'';position:absolute;top:-2px;right:-2px;width:60px;height:60px;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:24px;font-weight:700;transform:translate(20%,-20%) rotate(15deg);box-shadow:0 4px 12px rgba(22,163,74,0.3)}
+.big-amount .label{font-size:11px;color:#16a34a;text-transform:uppercase;font-weight:700;letter-spacing:1.5px;margin-bottom:8px}
+.big-amount .val{font-size:36px;color:#15803d;font-family:'Courier New',monospace;font-weight:700;letter-spacing:-1px}
+.big-amount .method{margin-top:10px;display:inline-block;background:#fff;color:#16a34a;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #86efac}
+.section{background:#fafaf8;border-radius:8px;padding:16px 20px;margin-bottom:14px}
+.section-title{font-size:10px;color:${color};text-transform:uppercase;font-weight:700;letter-spacing:1.2px;margin-bottom:10px}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:12px;border-bottom:1px dashed #e5e5e5}
 .info-row:last-child{border-bottom:none}
 .info-row .label{color:#666}
 .info-row .val{font-weight:600;color:#1a1916}
-.info-row .mono{font-family:monospace}
-.footer{border-top:1px solid #eee;padding-top:14px;margin-top:20px;text-align:center;font-size:10px;color:#888;line-height:1.6}
-.print-bar{position:fixed;top:12px;right:12px;display:flex;gap:8px}
-.print-bar button{padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-family:Arial}
-.btn-print{background:${color};color:#fff}
-.btn-close{background:#fff;border:1px solid #ddd;color:#666}
-@media print{body{background:#fff;padding:0}.page{box-shadow:none}.print-bar{display:none}}
-</style></head>
-<body>
-<div class="print-bar">
-  <button class="btn-print" onclick="window.print()">🖨 Imprimer</button>
+.info-row .mono{font-family:'Courier New',monospace;font-size:11px}
+.info-row .pill{background:${color}15;color:${color};padding:3px 10px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px}
+.final-balance{background:${b.total_amount - b.paid_amount > 0 ? '#fff7ed' : '#f0fdf4'};border:2px solid ${b.total_amount - b.paid_amount > 0 ? '#fb923c' : '#22c55e'};border-radius:8px;padding:14px 18px;text-align:center;margin-bottom:18px}
+.final-balance .label{font-size:10px;color:${b.total_amount - b.paid_amount > 0 ? '#b45309' : '#15803d'};text-transform:uppercase;font-weight:700;letter-spacing:1px;margin-bottom:4px}
+.final-balance .val{font-size:18px;font-family:'Courier New',monospace;font-weight:700;color:${b.total_amount - b.paid_amount > 0 ? '#d97706' : '#15803d'}}
+.stamp{text-align:center;margin:20px 0;color:#999;font-size:11px;font-style:italic;padding:12px;border:2px dashed #ddd;border-radius:6px}
+.footer{border-top:1px solid #eee;padding:16px 20px;text-align:center;background:#fafaf8}
+.footer .name{font-weight:700;color:#1a1916;font-size:12px;margin-bottom:4px}
+.footer .contact{font-size:10px;color:#666;line-height:1.6}
+.dev-credit{margin-top:10px;font-size:9px;color:#999}
+.dev-credit strong{color:${color}}
+@media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.toolbar{display:none !important}}
+.toolbar{position:fixed;top:15px;right:15px;display:flex;gap:10px;z-index:100;background:#fff;padding:10px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15)}
+.toolbar button{padding:9px 18px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:Arial}
+.btn-print{background:${color};color:#fff}.btn-close{background:#f5f5f5;border:1px solid #ddd;color:#666}
+</style></head><body>
+<div class="toolbar">
+  <button class="btn-print" onclick="window.print()">🖨 Imprimer / PDF</button>
   <button class="btn-close" onclick="window.close()">✕</button>
 </div>
 <div class="page">
   <div class="header">
-    <h1>${settings?.company_name||'ABOU IYAD'}</h1>
-    <p>REÇU DE PAIEMENT</p>
+    <h1>${company}</h1>
+    <div class="tagline">Développé par RS Comptabilité</div>
+    <h2>REÇU DE PAIEMENT</h2>
   </div>
-  <div class="big-amount">
-    <div class="label">Montant encaissé</div>
-    <div class="val">${dzd(payment.amount)}</div>
-  </div>
-  <div class="info-block">
-    <div class="info-row"><span class="label">N° Reçu</span><span class="val mono">${payment.id?.slice(0,8).toUpperCase()}</span></div>
-    <div class="info-row"><span class="label">Date</span><span class="val">${new Date(payment.created_at).toLocaleString('fr-DZ')}</span></div>
-    <div class="info-row"><span class="label">Méthode</span><span class="val">${payment.method}</span></div>
-  </div>
-  <div class="info-block">
-    <div class="info-row"><span class="label">Facture associée</span><span class="val mono">${bill.invoice_number}</span></div>
-    <div class="info-row"><span class="label">Client</span><span class="val">${bill.clients?.full_name}</span></div>
-    <div class="info-row"><span class="label">Total facture TTC</span><span class="val mono">${dzd(bill.total_amount)}</span></div>
-    <div class="info-row"><span class="label">Solde restant</span><span class="val mono" style="color:${bill.total_amount-bill.paid_amount>0?'#d97706':'#16a34a'}">${dzd(bill.total_amount-bill.paid_amount)}</span></div>
+  <div class="content">
+    <div class="ref-number">
+      Référence <strong>#${refNum}</strong>
+    </div>
+
+    <div class="big-amount">
+      <div class="label">Montant encaissé</div>
+      <div class="val">${payment.amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</div>
+      <div class="method">${payment.method}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">📋 Détails du paiement</div>
+      <div class="info-row"><span class="label">Date & heure</span><span class="val">${new Date(payment.created_at).toLocaleString('fr-DZ')}</span></div>
+      <div class="info-row"><span class="label">Méthode</span><span class="pill">${payment.method}</span></div>
+      <div class="info-row"><span class="label">Enregistré par</span><span class="val">${enregistrePar}</span></div>
+      ${payment.note ? `<div class="info-row"><span class="label">Note</span><span class="val" style="font-size:11px">${payment.note}</span></div>` : ''}
+    </div>
+
+    <div class="section">
+      <div class="section-title">📄 Facture associée</div>
+      <div class="info-row"><span class="label">N° Facture</span><span class="val mono" style="color:${color}">${b.invoice_number}</span></div>
+      <div class="info-row"><span class="label">Client</span><span class="val">${b.clients?.full_name || '—'}</span></div>
+      ${b.clients?.phone ? `<div class="info-row"><span class="label">Téléphone</span><span class="val">${b.clients.phone}</span></div>` : ''}
+      <div class="info-row"><span class="label">Total facture TTC</span><span class="val mono">${b.total_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+      <div class="info-row"><span class="label">Total encaissé</span><span class="val mono" style="color:#16a34a">${b.paid_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+    </div>
+
+    <div class="final-balance">
+      <div class="label">${b.total_amount - b.paid_amount > 0 ? 'Solde restant dû' : '✓ Facture entièrement réglée'}</div>
+      <div class="val">${(b.total_amount - b.paid_amount).toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</div>
+    </div>
+
+    <div class="stamp">Ce reçu fait foi du paiement enregistré dans notre système</div>
   </div>
   <div class="footer">
-    ${settings?.company_name||'ABOU IYAD'}${settings?.phone?` · ${settings.phone}`:''}<br>
-    Ce reçu fait foi du paiement enregistré dans notre système<br>
-    <strong>Développé par RS Comptabilité</strong>
+    <div class="name">${company}</div>
+    <div class="contact">
+      ${s.address || ''}<br>
+      ${s.phone ? `📞 ${s.phone}` : ''} ${s.email ? ` · ✉ ${s.email}` : ''}<br>
+      ${s.tax_number ? `NIF/RC : ${s.tax_number}` : ''}
+    </div>
+    <div class="dev-credit">
+      Généré le ${new Date().toLocaleString('fr-DZ')}<br>
+      Système <strong>${company}</strong> — Développé par <strong>RS Comptabilité</strong>
+    </div>
   </div>
 </div>
-</body></html>
-  `)
+</body></html>`)
   win.document.close()
 }
 
