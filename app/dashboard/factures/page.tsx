@@ -617,13 +617,7 @@ export default function FacturesPage() {
     setView('detail')
   }
 
-  async function exportPDF(bill: any) {
-    const [{ data: items },{ data: pays }] = await Promise.all([
-      supabase.from('bill_items').select('*, products(name)').eq('bill_id',bill.id),
-      supabase.from('payments').select('*').eq('bill_id',bill.id).order('created_at',{ascending:true})
-    ])
-    generatePDF(bill, items||[], settings, pays||[])
-  }
+
 
   async function archive(id: string) {
     if (!confirm('Archiver cette facture ?')) return
@@ -685,7 +679,7 @@ async function deleteBill(id: string, invNum: string) {
             </div>
           </div>
           <div style={{display:'flex',gap:8}}>
-            <button style={btnG} onClick={()=>exportPDF(selectedBill)}>
+            <button style={btnG} onClick={()=>generatePDF(selectedBill, settings)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               Télécharger PDF
             </button>
@@ -1064,7 +1058,7 @@ async function deleteBill(id: string, invNum: string) {
                         {b.status!=='payé' && (
                           <button style={{...btnSm,background:'rgba(22,163,74,0.08)',color:'#16a34a',border:'1px solid rgba(22,163,74,0.15)'}} onClick={()=>{setSelectedBill(b);setView('pay')}}>Régler</button>
                         )}
-                        <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>exportPDF(b)}>PDF</button>
+                        <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>generatePDF(b, settings)}>PDF</button>
                         <button style={{...btnSm,background:'rgba(217,119,6,0.08)',color:'#d97706',border:'1px solid rgba(217,119,6,0.15)'}} onClick={()=>archive(b.id)}>Archiver</button>
                         <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>deleteBill(b.id, b.invoice_number)}>Supprimer</button>
                       </div>
