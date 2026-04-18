@@ -294,6 +294,7 @@ tbody tr:last-child td{border-bottom:none}
 <div class="page">
   <div class="header">
     <div class="company-info">
+      ${s.logo_url ? `<img src="${s.logo_url}" style="max-height:60px;margin-bottom:8px" alt="Logo"/>` : ''}
       <h1>${company}</h1>
       <div class="tagline">Développé par RS Comptabilité</div>
       <p>
@@ -457,6 +458,7 @@ body{background:#f5f5f5;padding:20px;color:#1a1916}
 </div>
 <div class="page">
   <div class="header">
+    ${s.logo_url ? `<img src="${s.logo_url}" style="max-height:45px;margin-bottom:6px;filter:brightness(0) invert(1)" alt="Logo"/>` : ''}
     <h1>${company}</h1>
     <div class="tagline">Développé par RS Comptabilité</div>
     <h2>REÇU DE PAIEMENT</h2>
