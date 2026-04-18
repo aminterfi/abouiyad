@@ -628,7 +628,13 @@ export default function FacturesPage() {
     await supabase.from('bills').update({is_archived:true}).eq('id',id)
     fetchAll()
   }
-
+async function deleteBill(id: string, invNum: string) {
+    if (!confirm(`⚠️ SUPPRIMER DÉFINITIVEMENT la facture ${invNum} ?\n\nTous les paiements liés seront aussi supprimés.\nCette action est IRRÉVERSIBLE.`)) return
+    await supabase.from('payments').delete().eq('bill_id', id)
+    await supabase.from('bill_items').delete().eq('bill_id', id)
+    await supabase.from('bills').delete().eq('id', id)
+    fetchAll()
+  }
   function exportExcel() {
     const headers = ['N° Facture','Client','Total TTC','Payé','Solde','Statut','Date']
     const rows = filtered.map(b => [b.invoice_number, b.clients?.full_name, b.total_amount, b.paid_amount, b.total_amount-b.paid_amount, b.status, new Date(b.created_at).toLocaleDateString('fr-DZ')])
@@ -1057,7 +1063,8 @@ export default function FacturesPage() {
                           <button style={{...btnSm,background:'rgba(22,163,74,0.08)',color:'#16a34a',border:'1px solid rgba(22,163,74,0.15)'}} onClick={()=>{setSelectedBill(b);setView('pay')}}>Régler</button>
                         )}
                         <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>exportPDF(b)}>PDF</button>
-                        <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>archive(b.id)}>Archiver</button>
+                        <button style={{...btnSm,background:'rgba(217,119,6,0.08)',color:'#d97706',border:'1px solid rgba(217,119,6,0.15)'}} onClick={()=>archive(b.id)}>Archiver</button>
+                        <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>deleteBill(b.id, b.invoice_number)}>Supprimer</button>
                       </div>
                     </td>
                   </tr>
