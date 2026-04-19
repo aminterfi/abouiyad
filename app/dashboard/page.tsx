@@ -278,7 +278,7 @@ export default function Dashboard() {
   if (loading) return (
     <div style={{padding:16}}>
       {[1,2,3].map(i => (
-        <div key={i} style={{height:80,background:'#fff',borderRadius:12,marginBottom:12,border:'1px solid rgba(0,0,0,0.05)',
+        <div key={i} style={{height:80,borderRadius:12,marginBottom:12,border:'1px solid rgba(0,0,0,0.05)',
           background:'linear-gradient(90deg, #f0eeea 0%, #f8f7f5 50%, #f0eeea 100%)',backgroundSize:'200% 100%',
           animation:'shimmer 1.5s infinite'}}/>
       ))}
