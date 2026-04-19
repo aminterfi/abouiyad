@@ -10,7 +10,7 @@ const ClientIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="n
 const PayIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
 const ProdIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
 const UserIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-const SettingIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+const SettingIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
 const PlusIcon = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 
 const ALL_NAV = [
@@ -43,8 +43,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const savedCollapsed = localStorage.getItem('sidebar_collapsed')
     if (savedCollapsed === 'true') setCollapsed(true)
     fetchSettings()
-
-    // Detect mobile
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
@@ -74,9 +72,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     localStorage.setItem('sidebar_collapsed', String(newVal))
   }
 
-  // 🎯 Auto-collapse on navigation (desktop only)
   function handleNavClick() {
-    setOpen(false) // close mobile
+    setOpen(false)
     if (!isMobile) {
       setCollapsed(true)
       localStorage.setItem('sidebar_collapsed', 'true')
@@ -100,7 +97,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const sidebarWidth = collapsed ? 64 : 218
   const companyName = settings.company_name || 'ABOU IYAD'
 
-  // ===== MOBILE BOTTOM NAV =====
   const MOBILE_NAV = [
     { label: 'Accueil', href: '/dashboard', icon: DashIcon },
     { label: 'Factures', href: '/dashboard/factures', icon: BillIcon },
@@ -110,7 +106,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => (
     <div style={{ width: inDrawer ? 240 : sidebarWidth, background: '#1a1916', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', transition: 'width .25s ease' }}>
-      {/* LOGO */}
       <div style={{ padding: (collapsed && !inDrawer) ? '18px 0' : '18px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: (collapsed && !inDrawer) ? 'center' : 'flex-start', gap: 10, flexShrink: 0 }}>
         {settings.logo_url ? (
           <img src={settings.logo_url} alt="Logo" style={{ width: 32, height: 32, borderRadius: 7, objectFit: 'cover', flexShrink: 0 }} />
@@ -127,7 +122,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       </div>
 
-      {/* NAV */}
       <nav style={{ flex: 1, padding: (collapsed && !inDrawer) ? '10px 6px' : '10px 8px', overflowY: 'auto', overflowX: 'hidden' }}>
         {SECTIONS.map(section => {
           const items = NAV.filter(n => n.section === section)
@@ -203,34 +197,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#f5f4f1' }}>
+      {!isMobile && <div style={{ flexShrink: 0 }}><Sidebar /></div>}
 
-      {/* DESKTOP SIDEBAR */}
-      {!isMobile && (
-        <div style={{ flexShrink: 0 }}>
-          <Sidebar />
-        </div>
-      )}
+      {isMobile && open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 99 }} />}
 
-      {/* MOBILE DRAWER OVERLAY */}
-      {isMobile && open && (
-        <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 99 }} />
-      )}
-
-      {/* MOBILE DRAWER */}
       {isMobile && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, height: '100%', zIndex: 100,
-          transform: open ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 0.3s ease', width: 240,
-        }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, height: '100%', zIndex: 100, transform: open ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.3s ease', width: 240 }}>
           <Sidebar inDrawer />
         </div>
       )}
 
-      {/* MAIN */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-
-        {/* TOPBAR */}
         <div style={{ height: 52, background: '#fff', borderBottom: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, flexShrink: 0 }}>
           {isMobile && (
             <button onClick={() => setOpen(!open)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
@@ -244,12 +221,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        {/* CONTENT */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 14px 84px' : 22 }}>
-          {children}
-        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 14px 84px' : 22 }}>{children}</div>
 
-        {/* MOBILE BOTTOM NAV */}
         {isMobile && (
           <div style={{
             position: 'fixed', bottom: 0, left: 0, right: 0, height: 70,
@@ -266,13 +239,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               const active = pathname === item.href
               return (
                 <Link key={item.href} href={item.href}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    gap: 4, textDecoration: 'none', padding: '8px 14px', flex: 1,
-                    color: active ? '#2563EB' : '#a8a69e',
-                    fontSize: 10, fontWeight: active ? 600 : 500,
-                    transition: 'transform .15s', position: 'relative'
-                  }}>
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, textDecoration: 'none', padding: '8px 14px', flex: 1, color: active ? '#2563EB' : '#a8a69e', fontSize: 10, fontWeight: active ? 600 : 500, transition: 'transform .15s', position: 'relative' }}>
                   <div style={{ transform: active ? 'scale(1.1)' : 'scale(1)', transition: '.15s' }}><Icon /></div>
                   <span>{item.label}</span>
                   {active && <div style={{ position: 'absolute', top: 0, width: 30, height: 3, background: '#2563EB', borderRadius: '0 0 3px 3px' }} />}
@@ -280,7 +247,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               )
             })}
 
-            {/* CENTER QUICK ACTION BUTTON */}
             <Link href="/dashboard/factures"
               style={{
                 width: 58, height: 58, borderRadius: '50%',
@@ -295,19 +261,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <PlusIcon />
             </Link>
 
-            
             {MOBILE_NAV.slice(2).map(item => {
               const Icon = item.icon
               const active = pathname === item.href
               return (
                 <Link key={item.href} href={item.href}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    gap: 4, textDecoration: 'none', padding: '8px 14px', flex: 1,
-                    color: active ? '#2563EB' : '#a8a69e',
-                    fontSize: 10, fontWeight: active ? 600 : 500,
-                    transition: 'transform .15s', position: 'relative'
-                  }}>
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, textDecoration: 'none', padding: '8px 14px', flex: 1, color: active ? '#2563EB' : '#a8a69e', fontSize: 10, fontWeight: active ? 600 : 500, transition: 'transform .15s', position: 'relative' }}>
                   <div style={{ transform: active ? 'scale(1.1)' : 'scale(1)', transition: '.15s' }}><Icon /></div>
                   <span>{item.label}</span>
                   {active && <div style={{ position: 'absolute', top: 0, width: 30, height: 3, background: '#2563EB', borderRadius: '0 0 3px 3px' }} />}

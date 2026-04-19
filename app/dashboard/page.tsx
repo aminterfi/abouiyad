@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -13,24 +13,19 @@ function formatShort(v: number) {
   return Math.round(v).toString()
 }
 
-// ===== PREMIUM BAR CHART =====
 function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[] }) {
   const [hovered, setHovered] = useState<number | null>(null)
   const [animated, setAnimated] = useState(false)
   const max = Math.max(...monthly, 1)
-  const maxScale = max * 1.2 // leave space at top
+  const maxScale = max * 1.2
 
   useEffect(() => {
     const timer = setTimeout(() => setAnimated(true), 100)
     return () => clearTimeout(timer)
   }, [monthly])
 
-  // Y axis ticks
   const yTicks = 4
-  const yLabels = Array.from({ length: yTicks + 1 }, (_, i) => {
-    const val = (maxScale / yTicks) * (yTicks - i)
-    return formatShort(val)
-  })
+  const yLabels = Array.from({ length: yTicks + 1 }, (_, i) => formatShort((maxScale / yTicks) * (yTicks - i)))
 
   return (
     <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.06)',borderRadius:16,padding:20,boxShadow:'0 1px 3px rgba(0,0,0,0.03)',overflow:'hidden'}}>
@@ -41,50 +36,33 @@ function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[]
         </div>
         <div style={{display:'flex',gap:10,fontSize:10,color:'#6b6860'}}>
           <div style={{display:'flex',alignItems:'center',gap:5}}>
-            <div style={{width:8,height:8,borderRadius:2,background:'#5B3DF5'}}/>
-            Encaissé
+            <div style={{width:8,height:8,borderRadius:2,background:'#5B3DF5'}}/>Encaissé
           </div>
           <div style={{display:'flex',alignItems:'center',gap:5}}>
-            <div style={{width:8,height:8,borderRadius:2,background:'#8B7CF6',opacity:0.5}}/>
-            Projection
+            <div style={{width:8,height:8,borderRadius:2,background:'#8B7CF6',opacity:0.5}}/>Projection
           </div>
         </div>
       </div>
 
-      {/* TOOLTIP */}
       {hovered !== null && (
-        <div style={{
-          background:'#1a1916',color:'#fff',padding:'8px 12px',borderRadius:8,
-          fontSize:12,marginBottom:10,display:'inline-block',
-          fontWeight:500,boxShadow:'0 4px 12px rgba(0,0,0,0.15)'
-        }}>
+        <div style={{background:'#1a1916',color:'#fff',padding:'8px 12px',borderRadius:8,fontSize:12,marginBottom:10,display:'inline-block',fontWeight:500,boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
           <span style={{opacity:0.7}}>{labels[hovered]} · </span>
           <strong style={{color:'#a78bfa'}}>+ {dzdS(monthly[hovered])}</strong>
         </div>
       )}
 
       <div style={{position:'relative',height:180,display:'flex',alignItems:'flex-end'}}>
-        {/* Y-axis labels */}
         <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',height:'100%',paddingRight:8,paddingBottom:22}}>
           {yLabels.map((l, i) => (
             <div key={i} style={{fontSize:9,color:'#c8c6be',fontFamily:'JetBrains Mono,monospace',textAlign:'right'}}>{l}</div>
           ))}
         </div>
 
-        {/* Chart area */}
         <div style={{flex:1,position:'relative',height:'100%'}}>
-          {/* Grid lines */}
           {yLabels.map((_, i) => (
-            <div key={i} style={{
-              position:'absolute',
-              top:`${(i/yTicks)*(100-15)}%`,
-              left:0,right:0,
-              borderTop:'1px dashed rgba(0,0,0,0.05)',
-              pointerEvents:'none'
-            }}/>
+            <div key={i} style={{position:'absolute',top:`${(i/yTicks)*(100-15)}%`,left:0,right:0,borderTop:'1px dashed rgba(0,0,0,0.05)',pointerEvents:'none'}}/>
           ))}
 
-          {/* Bars */}
           <div style={{display:'flex',alignItems:'flex-end',gap:4,height:'100%',paddingBottom:22,position:'relative'}}>
             {monthly.map((val, i) => {
               const pctHeight = animated ? (val / maxScale) * 100 : 0
@@ -98,9 +76,7 @@ function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[]
                   <div style={{
                     width:'100%',maxWidth:24,height:`${pctHeight}%`,minHeight:val>0?4:0,
                     borderRadius:'6px 6px 0 0',
-                    background:isLast
-                      ? 'linear-gradient(180deg, rgba(91,61,245,0.5), rgba(91,61,245,0.3))'
-                      : `linear-gradient(180deg, #5B3DF5, #7c5cf5)`,
+                    background:isLast?'linear-gradient(180deg, rgba(91,61,245,0.5), rgba(91,61,245,0.3))':'linear-gradient(180deg, #5B3DF5, #7c5cf5)',
                     transition:'all .8s cubic-bezier(.4,0,.2,1)',
                     cursor:'pointer',
                     transform:isHovered?'scaleY(1.02)':'scaleY(1)',
@@ -108,13 +84,8 @@ function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[]
                     boxShadow:isHovered?'0 4px 12px rgba(91,61,245,0.3)':'none',
                     position:'relative'
                   }}>
-                    {/* Diagonal stripes for last (projection) */}
                     {isLast && (
-                      <div style={{
-                        position:'absolute',inset:0,
-                        backgroundImage:'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)',
-                        borderRadius:'6px 6px 0 0'
-                      }}/>
+                      <div style={{position:'absolute',inset:0,backgroundImage:'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)',borderRadius:'6px 6px 0 0'}}/>
                     )}
                   </div>
                 </div>
@@ -122,7 +93,6 @@ function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[]
             })}
           </div>
 
-          {/* Month labels */}
           <div style={{position:'absolute',bottom:0,left:0,right:0,display:'flex',gap:4}}>
             {labels.map((l, i) => (
               <div key={i} style={{flex:1,fontSize:9,color:'#a8a69e',textAlign:'center',fontWeight:500}}>{l.slice(0,3)}</div>
@@ -134,7 +104,6 @@ function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[]
   )
 }
 
-// ===== KPI CARD =====
 function KpiCard({ label, value, sub, color, icon, trend, isMobile }: any) {
   return (
     <div style={{
@@ -152,8 +121,8 @@ function KpiCard({ label, value, sub, color, icon, trend, isMobile }: any) {
       <div style={{fontSize:11,color:'#a8a69e',fontWeight:600,textTransform:'uppercase',letterSpacing:'.4px',marginBottom:8}}>{label}</div>
       <div style={{fontSize:24,fontWeight:700,color,fontFamily:'JetBrains Mono,monospace',lineHeight:1.1,marginBottom:6}}>{value}</div>
       <div style={{fontSize:11,color:'#a8a69e',display:'flex',alignItems:'center',gap:4}}>
-        {trend && <span style={{color:trend>0?'#16a34a':'#dc2626',fontWeight:700}}>{trend>0?'↑':'↓'} {Math.abs(trend)}%</span>}
-        {sub}
+        {trend !== undefined && trend !== 0 && <span style={{color:trend>0?'#16a34a':'#dc2626',fontWeight:700}}>{trend>0?'↑':'↓'} {Math.abs(trend)}%</span>}
+        <span>{sub}</span>
       </div>
     </div>
   )
@@ -234,7 +203,6 @@ export default function Dashboard() {
     const impayees = bills.filter((b:any) => b.status === 'impayé').length
     const payees = bills.filter((b:any) => b.status === 'payé').length
 
-    // 12 derniers mois
     const monthly: number[] = []
     const labels: string[] = []
     for (let i = 11; i >= 0; i--) {
@@ -277,12 +245,13 @@ export default function Dashboard() {
 
   if (loading) return (
     <div style={{padding:16}}>
+      <style>{`
+        @keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+        @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
+      `}</style>
       {[1,2,3].map(i => (
-        <div key={i} style={{height:80,borderRadius:12,marginBottom:12,border:'1px solid rgba(0,0,0,0.05)',
-          background:'linear-gradient(90deg, #f0eeea 0%, #f8f7f5 50%, #f0eeea 100%)',backgroundSize:'200% 100%',
-          animation:'shimmer 1.5s infinite'}}/>
+        <div key={i} style={{height:80,borderRadius:12,marginBottom:12,border:'1px solid rgba(0,0,0,0.05)',background:'linear-gradient(90deg, #f0eeea 0%, #f8f7f5 50%, #f0eeea 100%)',backgroundSize:'200% 100%',animation:'shimmer 1.5s infinite'}}/>
       ))}
-      <style>{`@keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }`}</style>
     </div>
   )
 
@@ -295,15 +264,18 @@ export default function Dashboard() {
     return <span style={{background:'rgba(220,38,38,0.08)',color:'#dc2626',fontSize:10,fontWeight:600,padding:'3px 8px',borderRadius:20}}>Impayé</span>
   }
 
-  // Tap animation style
-  const tapStyle: React.CSSProperties = { transition: 'transform .15s', cursor: 'pointer' }
-  const handleTap = (e: any) => { e.currentTarget.style.transform = 'scale(0.97)' }
-  const handleTapEnd = (e: any) => { e.currentTarget.style.transform = 'scale(1)' }
+  const kpiScrollStyle: React.CSSProperties = isMobile
+    ? { display:'flex', gap:12, marginBottom:20, overflowX:'auto', scrollSnapType:'x mandatory', margin:'0 -16px 20px', padding:'0 16px' }
+    : { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }
 
   return (
     <div style={{maxWidth:'100%',overflow:'hidden'}}>
+      <style>{`
+        @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
 
-      {/* HEADER */}
       <div style={{marginBottom:20}}>
         <div style={{fontSize:isMobile?22:24,fontWeight:800,letterSpacing:'-.5px',color:'#1a1916'}}>Tableau de bord</div>
         <div style={{fontSize:13,color:'#a8a69e',marginTop:3,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
@@ -317,11 +289,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* PERIOD SEGMENTED CONTROL */}
       <div style={{background:'#f0eeea',borderRadius:12,padding:4,display:'flex',marginBottom:20}}>
         {[{v:'semaine',l:'Semaine'},{v:'mois',l:'Mois'},{v:'annee',l:'Année'}].map(p=>(
           <button key={p.v} onClick={()=>setPeriod(p.v)}
-            onTouchStart={handleTap} onTouchEnd={handleTapEnd}
             style={{
               flex:1,padding:'10px',borderRadius:9,fontSize:13,cursor:'pointer',border:'none',
               fontFamily:'inherit',fontWeight:period===p.v?600:500,
@@ -333,22 +303,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* KPI CARDS - Horizontal scroll mobile, grid desktop */}
-      <div style={{
-        display:isMobile?'flex':'grid',
-        gridTemplateColumns:!isMobile?'repeat(4,1fr)':undefined,
-        gap:12,marginBottom:20,
-        overflowX:isMobile?'auto':'visible',
-        scrollSnapType:isMobile?'x mandatory':'none',
-        margin:isMobile?'0 -16px 20px':'0 0 20px',
-        padding:isMobile?'0 16px':0,
-        scrollbarWidth:'none',
-        msOverflowStyle:'none'
-      } as any}>
-        <style>{`
-          div::-webkit-scrollbar { display: none; }
-          @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
-        `}</style>
+      <div className="hide-scrollbar" style={kpiScrollStyle}>
         <KpiCard isMobile={isMobile}
           label={`CA ${period}`}
           value={dzdS(data.caPeriod)}
@@ -380,12 +335,10 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* CHART */}
       <div style={{marginBottom:20}}>
         <RevenueChart monthly={monthlyRev} labels={monthlyLabels} />
       </div>
 
-      {/* STATUS DISTRIBUTION */}
       <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,padding:20,marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
         <div style={{fontSize:15,fontWeight:700,marginBottom:4,color:'#1a1916'}}>État des factures</div>
         <div style={{fontSize:11,color:'#a8a69e',marginBottom:16}}>{totalBills} factures au total</div>
@@ -406,7 +359,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* QUICK ACTIONS */}
       <div style={{marginBottom:20}}>
         <div style={{fontSize:14,fontWeight:700,marginBottom:12,color:'#1a1916',paddingLeft:4}}>Actions rapides</div>
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10}}>
@@ -416,15 +368,15 @@ export default function Dashboard() {
             { label:'Encaisser', href:'/dashboard/factures', color:'#d97706', icon:'💰' },
             { label:'Produits', href:'/dashboard/produits', color:'#7c3aed', icon:'📦' },
           ].map(item => (
-            <Link key={item.label} href={item.href} style={tapStyle}
-              onTouchStart={handleTap} onTouchEnd={handleTapEnd}
-              style={{...tapStyle,
+            <Link key={item.label} href={item.href}
+              style={{
                 display:'flex',flexDirection:isMobile?'row':'column',alignItems:'center',gap:isMobile?12:8,
                 padding:isMobile?'16px':'18px 12px',
                 background:'#fff',
                 border:'1px solid rgba(0,0,0,0.05)',
                 borderRadius:12,textDecoration:'none',
-                boxShadow:'0 1px 3px rgba(0,0,0,0.03)'
+                boxShadow:'0 1px 3px rgba(0,0,0,0.03)',
+                transition:'transform .15s'
               }}>
               <div style={{width:40,height:40,borderRadius:10,background:`${item.color}10`,color:item.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>{item.icon}</div>
               <div style={{fontSize:13,fontWeight:600,color:'#1a1916',textAlign:isMobile?'left':'center'}}>{item.label}</div>
@@ -433,10 +385,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* RECENT ACTIVITY */}
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:16,marginBottom:20}}>
-
-        {/* RECENT BILLS */}
         <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
           <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{fontSize:14,fontWeight:700}}>Dernières factures</div>
@@ -450,11 +399,7 @@ export default function Dashboard() {
               </div>
             ) : recentBills.map((b,i) => (
               <Link key={b.id} href="/dashboard/factures"
-                style={{
-                  display:'flex',alignItems:'center',gap:12,padding:'14px 18px',
-                  borderBottom:i<recentBills.length-1?'1px solid rgba(0,0,0,0.04)':'none',
-                  textDecoration:'none',color:'inherit'
-                }}>
+                style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderBottom:i<recentBills.length-1?'1px solid rgba(0,0,0,0.04)':'none',textDecoration:'none',color:'inherit'}}>
                 <div style={{width:36,height:36,borderRadius:10,background:'rgba(37,99,235,0.08)',color:'#2563EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
                   {b.clients?.full_name?.split(' ').map((w:string)=>w[0]).slice(0,2).join('')}
                 </div>
@@ -471,7 +416,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* RECENT PAYMENTS */}
         <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
           <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{fontSize:14,fontWeight:700}}>Derniers paiements</div>
@@ -497,7 +441,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* TOP CLIENTS */}
       {topClients.length > 0 && (
         <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden',marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
           <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
