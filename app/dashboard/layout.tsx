@@ -252,8 +252,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* MOBILE BOTTOM NAV */}
         {isMobile && (
           <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0, height: 66,
-            background: '#fff', borderTop: '1px solid rgba(0,0,0,0.08)',
+            position: 'fixed', bottom: 0, left: 0, right: 0, height: 70,
+            background: 'rgba(255,255,255,0.85)',
+            backdropFilter: 'saturate(180%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+            borderTop: '1px solid rgba(0,0,0,0.06)',
             display: 'flex', alignItems: 'center', justifyContent: 'space-around',
             zIndex: 50, boxShadow: '0 -2px 12px rgba(0,0,0,0.06)',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)'
@@ -280,18 +283,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* CENTER QUICK ACTION BUTTON */}
             <Link href="/dashboard/factures"
               style={{
-                width: 54, height: 54, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #2563EB, #1d4ed8)',
+                width: 58, height: 58, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #5B3DF5, #2563EB)',
                 color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 14px rgba(37,99,235,0.4), 0 0 0 4px #fff',
-                marginTop: -28, flexShrink: 0, textDecoration: 'none',
-                transition: 'transform .15s'
+                boxShadow: '0 6px 20px rgba(91,61,245,0.45), 0 0 0 4px #fff',
+                marginTop: -32, flexShrink: 0, textDecoration: 'none',
+                transition: 'transform .2s cubic-bezier(.4,0,.2,1)'
               }}
               onTouchStart={(e) => { e.currentTarget.style.transform = 'scale(0.92)' }}
               onTouchEnd={(e) => { e.currentTarget.style.transform = 'scale(1)' }}>
               <PlusIcon />
             </Link>
 
+            
             {MOBILE_NAV.slice(2).map(item => {
               const Icon = item.icon
               const active = pathname === item.href
