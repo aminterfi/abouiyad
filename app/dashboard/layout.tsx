@@ -14,16 +14,17 @@ const SettingIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 const PlusIcon = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 
 const ALL_NAV = [
-  { label: 'Tableau de bord', href: '/dashboard', section: 'Général', icon: DashIcon, roles: ['superadmin','admin','employe','lecteur'] },
-  { label: 'Factures', href: '/dashboard/factures', section: 'Gestion', icon: BillIcon, roles: ['superadmin','admin','employe','lecteur'] },
-  { label: 'Clients', href: '/dashboard/clients', section: 'Gestion', icon: ClientIcon, roles: ['superadmin','admin','employe','lecteur'] },
-  { label: 'Paiements', href: '/dashboard/paiements', section: 'Gestion', icon: PayIcon, roles: ['superadmin','admin','employe','lecteur'] },
-  { label: 'Produits', href: '/dashboard/produits', section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','lecteur'] },
-  { label: 'Utilisateurs', href: '/dashboard/utilisateurs', section: 'Administration', icon: UserIcon, roles: ['superadmin','admin'] },
-  { label: 'Paramètres', href: '/dashboard/parametres', section: 'Administration', icon: SettingIcon, roles: ['superadmin','admin'] },
+  { label: 'Tableau de bord', href: '/dashboard', section: 'Général', icon: DashIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
+  { label: 'Factures', href: '/dashboard/factures', section: 'Gestion', icon: BillIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
+  { label: 'Clients', href: '/dashboard/clients', section: 'Gestion', icon: ClientIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
+  { label: 'Paiements', href: '/dashboard/paiements', section: 'Gestion', icon: PayIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
+  { label: 'Produits', href: '/dashboard/produits', section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
+  { label: 'Utilisateurs', href: '/dashboard/utilisateurs', section: 'Administration', icon: UserIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },
+  { label: 'Paramètres', href: '/dashboard/parametres', section: 'Administration', icon: SettingIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },
+  { label: '🛡️ Admin RS', href: '/dashboard/admin-platform', section: 'RS Comptabilité', icon: DashIcon, roles: ['owner'], platformAdminOnly: true },
 ]
 
-const SECTIONS = ['Général', 'Gestion', 'Administration']
+const SECTIONS = ['Général', 'Gestion', 'Administration', 'RS Comptabilité']
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null)
@@ -32,6 +33,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -40,6 +42,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const u = localStorage.getItem('user')
     if (!u) { router.push('/'); return }
     setUser(JSON.parse(u))
+
+// Vérifier si platform admin
+    const parsed = JSON.parse(u)
+    if (parsed.type === 'owner' && parsed.id) {
+      supabase.from('owners').select('is_platform_admin').eq('id', parsed.id).single().then(({ data }) => {
+        setIsPlatformAdmin(data?.is_platform_admin || false)
+      })
+    }
+
     const savedCollapsed = localStorage.getItem('sidebar_collapsed')
     if (savedCollapsed === 'true') setCollapsed(true)
     fetchSettings()
@@ -91,7 +102,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>
   )
 
-  const NAV = ALL_NAV.filter(n => n.roles.includes(user.role))
+  const NAV = ALL_NAV.filter(n => {
+  if (n.platformAdminOnly && !isPlatformAdmin) return false
+  return n.roles.includes(user.role)
+})
   const initials = user.full_name?.split(' ').map((w: string) => w[0]).slice(0, 2).join('')
   const currentLabel = NAV.find(n => n.href === pathname)?.label || 'Tableau de bord'
   const sidebarWidth = collapsed ? 64 : 218
