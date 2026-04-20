@@ -22,7 +22,8 @@ export default function LoginPage() {
   }, [mode])
 
   async function loadCompanies() {
-    const { data } = await supabase.from('companies').select('id,name').order('name')
+    const { data, error } = await supabase.rpc('get_companies_list')
+    if (error) { console.error(error); return }
     setCompanies(data || [])
     if (data && data.length > 0 && !selectedCompany) setSelectedCompany(data[0].id)
   }
@@ -39,13 +40,14 @@ export default function LoginPage() {
       if (authErr) throw authErr
       if (!data.user) throw new Error('Utilisateur introuvable')
 
-      const { data: ownerData } = await supabase
+      const { data: ownerData, error: ownerErr } = await supabase
         .from('owners')
         .select('*, companies(*)')
         .eq('id', data.user.id)
-        .single()
+        .maybeSingle()
 
-      if (!ownerData) throw new Error('Aucune entreprise liée à ce compte')
+      if (ownerErr) throw ownerErr
+      if (!ownerData) throw new Error('Aucune entreprise liée à ce compte. Contactez l\'administrateur.')
 
       const { data: sub } = await supabase
         .from('subscriptions')
@@ -53,7 +55,7 @@ export default function LoginPage() {
         .eq('company_id', ownerData.company_id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
       localStorage.setItem('user', JSON.stringify({
         id: data.user.id,
@@ -62,9 +64,10 @@ export default function LoginPage() {
         role: 'owner',
         company_id: ownerData.company_id,
         company_name: ownerData.companies?.name,
+        is_platform_admin: ownerData.is_platform_admin,
         type: 'owner',
       }))
-      localStorage.setItem('subscription', JSON.stringify(sub))
+      if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
 
       await supabase.from('owners').update({ last_login: new Date().toISOString() }).eq('id', data.user.id)
 
@@ -102,7 +105,6 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'linear-gradient(135deg, #f8f7f5 0%, #e8e6e0 100%)', fontFamily: 'Outfit, sans-serif' }}>
       <div style={{ width: '100%', maxWidth: 440 }}>
-
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
           <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(135deg, #2563EB, #5B3DF5)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 26, fontWeight: 800, boxShadow: '0 8px 24px rgba(91,61,245,0.3)', marginBottom: 14 }}>A</div>
           <div style={{ fontSize: 28, fontWeight: 800, color: '#1a1916', letterSpacing: '-.5px' }}>ABOU IYAD</div>
@@ -128,8 +130,7 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#dc2626', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+            <div style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#dc2626', marginBottom: 16 }}>
               {error}
             </div>
           )}
@@ -147,7 +148,7 @@ export default function LoginPage() {
                   style={{ width: '100%', padding: '11px 14px', fontSize: 14, border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8, background: '#f8f7f5', color: '#1a1916', fontFamily: 'inherit', outline: 'none' }}/>
               </div>
               <button type="submit" disabled={loading}
-                style={{ width: '100%', padding: 14, fontSize: 14, fontWeight: 600, background: loading ? '#a8a69e' : 'linear-gradient(135deg, #2563EB, #1d4ed8)', color: '#fff', border: 'none', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: loading ? 'none' : '0 4px 14px rgba(37,99,235,0.3)', transition: 'all .2s' }}>
+                style={{ width: '100%', padding: 14, fontSize: 14, fontWeight: 600, background: loading ? '#a8a69e' : 'linear-gradient(135deg, #2563EB, #1d4ed8)', color: '#fff', border: 'none', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
                 {loading ? 'Connexion...' : 'Se connecter'}
               </button>
               <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#6b6860' }}>
@@ -161,11 +162,16 @@ export default function LoginPage() {
             <form onSubmit={loginEmployee}>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, color: '#6b6860', marginBottom: 6, display: 'block' }}>Entreprise</label>
-                <select required value={selectedCompany} onChange={e => setSelectedCompany(e.target.value)}
-                  style={{ width: '100%', padding: '11px 14px', fontSize: 14, border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8, background: '#f8f7f5', color: '#1a1916', fontFamily: 'inherit', outline: 'none', appearance: 'none', paddingRight: 36 }}>
-                  <option value="">Sélectionnez une entreprise</option>
-                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                {companies.length === 0 ? (
+                  <div style={{ padding: '11px 14px', background: '#fff7ed', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 8, fontSize: 12, color: '#b45309' }}>
+                    Aucune entreprise disponible. Contactez votre administrateur.
+                  </div>
+                ) : (
+                  <select required value={selectedCompany} onChange={e => setSelectedCompany(e.target.value)}
+                    style={{ width: '100%', padding: '11px 14px', fontSize: 14, border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8, background: '#f8f7f5', color: '#1a1916', fontFamily: 'inherit', outline: 'none' }}>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, color: '#6b6860', marginBottom: 6, display: 'block' }}>Nom d'utilisateur</label>
@@ -178,7 +184,7 @@ export default function LoginPage() {
                   style={{ width: '100%', padding: '11px 14px', fontSize: 14, border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8, background: '#f8f7f5', color: '#1a1916', fontFamily: 'inherit', outline: 'none' }}/>
               </div>
               <button type="submit" disabled={loading || !selectedCompany}
-                style={{ width: '100%', padding: 14, fontSize: 14, fontWeight: 600, background: (loading || !selectedCompany) ? '#a8a69e' : 'linear-gradient(135deg, #2563EB, #1d4ed8)', color: '#fff', border: 'none', borderRadius: 8, cursor: (loading || !selectedCompany) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: (loading || !selectedCompany) ? 'none' : '0 4px 14px rgba(37,99,235,0.3)' }}>
+                style={{ width: '100%', padding: 14, fontSize: 14, fontWeight: 600, background: (loading || !selectedCompany) ? '#a8a69e' : 'linear-gradient(135deg, #2563EB, #1d4ed8)', color: '#fff', border: 'none', borderRadius: 8, cursor: (loading || !selectedCompany) ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
                 {loading ? 'Connexion...' : 'Se connecter'}
               </button>
             </form>
