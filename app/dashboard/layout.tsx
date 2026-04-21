@@ -34,7 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [subStatus, setSubStatus] = useState<string | null>(null)
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -48,29 +48,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const savedCollapsed = localStorage.getItem('sidebar_collapsed')
     if (savedCollapsed === 'true') setCollapsed(true)
+    fetchSettings(parsed.company_id)
     checkSubscription(parsed.company_id, parsed.is_platform_admin)
+
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  async function checkSubscription(companyId: string, isAdmin: boolean) {
-    if (isAdmin) return // Admin RS bypass
-    const { data } = await supabase.rpc('check_subscription_status', { p_company_id: companyId })
-    setSubStatus(data)
-    if (data === 'expired' || data === 'cancelled') {
-      localStorage.removeItem('user')
-      localStorage.removeItem('subscription')
-      router.push('/?expired=true')
-    }
-  }
+  async function fetchSettings(companyId?: string) {
     if (!companyId) return
     const { data } = await supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
     if (data) {
       setSettings(data)
       if (data.font_family) document.body.style.fontFamily = `${data.font_family}, sans-serif`
       if (data.font_size_base) document.body.style.fontSize = `${data.font_size_base}px`
+    }
+  }
+
+  async function checkSubscription(companyId: string, isAdmin: boolean) {
+    if (isAdmin) return
+    const { data } = await supabase.rpc('check_subscription_status', { p_company_id: companyId })
+    if (data === 'expired' || data === 'cancelled') {
+      localStorage.removeItem('user')
+      localStorage.removeItem('subscription')
+      await supabase.auth.signOut()
+      alert('Votre abonnement est suspendu ou expiré. Contactez RS Comptabilité.')
+      router.push('/')
     }
   }
 
