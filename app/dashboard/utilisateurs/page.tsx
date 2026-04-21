@@ -10,7 +10,6 @@ const btnP: React.CSSProperties = { background:'#2563EB', color:'#fff', border:'
 const btnG: React.CSSProperties = { background:'transparent', color:'#6b6860', border:'1px solid rgba(0,0,0,0.14)', borderRadius:6, padding:'9px 18px', fontSize:13, cursor:'pointer', fontFamily:'Outfit,sans-serif' }
 const btnSm: React.CSSProperties = { padding:'5px 10px', fontSize:12, borderRadius:5, cursor:'pointer', fontFamily:'Outfit,sans-serif' }
 
-// Hiérarchie : superadmin > admin > employe > lecteur
 const ALL_ROLES = [
   { value:'superadmin', label:'Super Admin', desc:'Contrôle total — Seul compte non supprimable', color:'#7c3aed', icon:'👑' },
   { value:'admin', label:'Administrateur', desc:'Gère utilisateurs + opérations courantes', color:'#2563EB', icon:'⚙️' },
@@ -38,21 +37,30 @@ export default function UtilisateursPage() {
 
   async function fetch() {
     setLoading(true)
-    const { data } = await supabase.from('users').select('*').order('created_at',{ascending:false})
+    const u = localStorage.getItem('user')
+    if (!u) return
+    const parsed = JSON.parse(u)
+    
+    // Filtrer par company_id
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('company_id', parsed.company_id)
+      .order('created_at',{ascending:false})
+    
     setUsers(data||[])
     setLoading(false)
   }
 
-  // Permissions
-  const isSuperAdmin = currentUser?.role === 'superadmin'
+  // Permissions : owner ET superadmin ont les mêmes droits (Super Admin)
+  const isSuperAdmin = currentUser?.role === 'superadmin' || currentUser?.role === 'owner'
   const isAdmin = currentUser?.role === 'admin'
   const canAccess = isSuperAdmin || isAdmin
 
-  // Qu'est-ce que peut créer/modifier l'utilisateur courant ?
   const creatableRoles = isSuperAdmin 
-    ? ALL_ROLES.filter(r => r.value !== 'superadmin')  // Super admin peut créer admin/employe/lecteur
+    ? ALL_ROLES.filter(r => r.value !== 'superadmin')
     : isAdmin 
-    ? ALL_ROLES.filter(r => r.value === 'employe' || r.value === 'lecteur')  // Admin peut créer employe/lecteur seulement
+    ? ALL_ROLES.filter(r => r.value === 'employe' || r.value === 'lecteur')
     : []
 
   function openNew() {
@@ -63,7 +71,6 @@ export default function UtilisateursPage() {
   }
 
   function openEdit(u: any) {
-    // Admin ne peut pas modifier superadmin ni autre admin
     if (isAdmin && (u.role === 'superadmin' || u.role === 'admin')) return
     setEditing(u)
     setForm({
@@ -81,7 +88,6 @@ export default function UtilisateursPage() {
     if (!editing && !form.password) { setError('Mot de passe obligatoire pour un nouvel utilisateur'); return }
     if (form.role === 'superadmin') { setError('Impossible de créer un Super Admin'); return }
     
-    // Admin ne peut créer que employe / lecteur
     if (isAdmin && !['employe','lecteur'].includes(form.role)) { setError('Vous ne pouvez créer que des Employés ou Lecteurs'); return }
 
     setSaving(true)
@@ -93,8 +99,9 @@ export default function UtilisateursPage() {
       role: form.role,
       salary: parseFloat(form.salary)||0,
       hiring_date: form.hiring_date||null,
+      company_id: currentUser?.company_id,
     }
-    if (!editing) data.password_hash = form.password  // TODO: hash en prod
+    if (!editing) data.password_hash = form.password
     try {
       if (editing) {
         await supabase.from('users').update(data).eq('id', editing.id)
@@ -142,10 +149,8 @@ export default function UtilisateursPage() {
   })
 
   const totalSalaires = users.filter(u => u.is_active).reduce((s,u) => s + (u.salary||0), 0)
-
   const roleInfo = (r: string) => ALL_ROLES.find(x=>x.value===r) || { color:'#6b6860', label:r, icon:'?' }
 
-  // ===== FORM FULL SCREEN =====
   if (showForm) {
     return (
       <div style={{minHeight:'100vh',background:'#f5f4f1',margin:-22,padding:0,fontFamily:'Outfit,sans-serif'}}>
@@ -245,7 +250,7 @@ export default function UtilisateursPage() {
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:12}}>
         <div>
           <div style={{fontSize:17,fontWeight:600,letterSpacing:'-.3px'}}>Utilisateurs</div>
-          <div style={{fontSize:12,color:'#a8a69e',marginTop:2}}>{users.length} utilisateur(s) · {users.filter(u=>u.is_active).length} actif(s) · Connecté en tant que <strong style={{color:roleInfo(currentUser?.role).color}}>{roleInfo(currentUser?.role).label}</strong></div>
+          <div style={{fontSize:12,color:'#a8a69e',marginTop:2}}>{users.length} utilisateur(s) · {users.filter(u=>u.is_active).length} actif(s)</div>
         </div>
         {creatableRoles.length > 0 && (
           <button style={btnP} onClick={openNew}>
