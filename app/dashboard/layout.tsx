@@ -34,7 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  const [subStatus, setSubStatus] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -48,14 +48,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const savedCollapsed = localStorage.getItem('sidebar_collapsed')
     if (savedCollapsed === 'true') setCollapsed(true)
-    fetchSettings(parsed.company_id)
+    checkSubscription(parsed.company_id, parsed.is_platform_admin)
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  async function fetchSettings(companyId?: string) {
+  async function checkSubscription(companyId: string, isAdmin: boolean) {
+    if (isAdmin) return // Admin RS bypass
+    const { data } = await supabase.rpc('check_subscription_status', { p_company_id: companyId })
+    setSubStatus(data)
+    if (data === 'expired' || data === 'cancelled') {
+      localStorage.removeItem('user')
+      localStorage.removeItem('subscription')
+      router.push('/?expired=true')
+    }
+  }
     if (!companyId) return
     const { data } = await supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
     if (data) {
