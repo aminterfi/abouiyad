@@ -23,7 +23,7 @@ export default function LoginPage() {
 
   async function loadCompanies() {
     const { data, error } = await supabase.rpc('get_companies_list')
-    if (error) { console.error(error); return }
+    if (error) { console.error('Companies error:', error); return }
     setCompanies(data || [])
     if (data && data.length > 0 && !selectedCompany) setSelectedCompany(data[0].id)
   }
@@ -33,46 +33,48 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const { data, error: authErr } = await supabase.auth.signInWithPassword({
+      // 1. Authentification Supabase
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
         email: ownerEmail.trim(),
         password: ownerPassword,
       })
       if (authErr) throw authErr
-      if (!data.user) throw new Error('Utilisateur introuvable')
+      if (!authData.user) throw new Error('Utilisateur introuvable')
 
-      const { data: ownerData, error: ownerErr } = await supabase
-        .from('owners')
-        .select('*, companies(*)')
-        .eq('id', data.user.id)
-        .maybeSingle()
+      console.log('Auth OK, user ID:', authData.user.id)
+
+      // 2. Récupérer owner info via RPC (contourne RLS)
+      const { data: ownerData, error: ownerErr } = await supabase.rpc('get_owner_info', {
+        p_user_id: authData.user.id
+      })
+
+      console.log('Owner data:', ownerData)
+      console.log('Owner error:', ownerErr)
 
       if (ownerErr) throw ownerErr
       if (!ownerData) throw new Error('Aucune entreprise liée à ce compte. Contactez l\'administrateur.')
 
-      const { data: sub } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('company_id', ownerData.company_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      // 3. Récupérer subscription via RPC
+      const { data: subData } = await supabase.rpc('get_company_subscription', {
+        p_company_id: ownerData.company_id
+      })
 
+      // 4. Stocker dans localStorage
       localStorage.setItem('user', JSON.stringify({
-        id: data.user.id,
-        email: data.user.email,
+        id: authData.user.id,
+        email: authData.user.email,
         full_name: ownerData.full_name,
         role: 'owner',
         company_id: ownerData.company_id,
-        company_name: ownerData.companies?.name,
+        company_name: ownerData.company_name,
         is_platform_admin: ownerData.is_platform_admin,
         type: 'owner',
       }))
-      if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
-
-      await supabase.from('owners').update({ last_login: new Date().toISOString() }).eq('id', data.user.id)
+      if (subData) localStorage.setItem('subscription', JSON.stringify(subData))
 
       router.push('/dashboard')
     } catch (err: any) {
+      console.error('Login error:', err)
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : (err.message || 'Erreur de connexion'))
     }
     setLoading(false)
@@ -115,11 +117,11 @@ export default function LoginPage() {
 
           <div style={{ background: '#f0eeea', borderRadius: 10, padding: 4, display: 'flex', marginBottom: 24 }}>
             <button onClick={() => { setMode('owner'); setError('') }}
-              style={{ flex: 1, padding: '10px', borderRadius: 7, fontSize: 13, cursor: 'pointer', border: 'none', fontFamily: 'inherit', fontWeight: mode === 'owner' ? 600 : 500, background: mode === 'owner' ? '#fff' : 'transparent', color: mode === 'owner' ? '#1a1916' : '#6b6860', boxShadow: mode === 'owner' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none', transition: 'all .2s' }}>
+              style={{ flex: 1, padding: '10px', borderRadius: 7, fontSize: 13, cursor: 'pointer', border: 'none', fontFamily: 'inherit', fontWeight: mode === 'owner' ? 600 : 500, background: mode === 'owner' ? '#fff' : 'transparent', color: mode === 'owner' ? '#1a1916' : '#6b6860', boxShadow: mode === 'owner' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none' }}>
               🏢 Propriétaire
             </button>
             <button onClick={() => { setMode('employee'); setError('') }}
-              style={{ flex: 1, padding: '10px', borderRadius: 7, fontSize: 13, cursor: 'pointer', border: 'none', fontFamily: 'inherit', fontWeight: mode === 'employee' ? 600 : 500, background: mode === 'employee' ? '#fff' : 'transparent', color: mode === 'employee' ? '#1a1916' : '#6b6860', boxShadow: mode === 'employee' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none', transition: 'all .2s' }}>
+              style={{ flex: 1, padding: '10px', borderRadius: 7, fontSize: 13, cursor: 'pointer', border: 'none', fontFamily: 'inherit', fontWeight: mode === 'employee' ? 600 : 500, background: mode === 'employee' ? '#fff' : 'transparent', color: mode === 'employee' ? '#1a1916' : '#6b6860', boxShadow: mode === 'employee' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none' }}>
               👤 Employé
             </button>
           </div>
