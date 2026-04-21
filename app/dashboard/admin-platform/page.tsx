@@ -47,10 +47,13 @@ export default function AdminPlatformPage() {
     const u = localStorage.getItem('user')
     if (!u) { router.push('/'); return }
     const parsed = JSON.parse(u)
-    if (parsed.type !== 'owner') { router.push('/dashboard'); return }
     
-    const { data: owner } = await supabase.from('owners').select('is_platform_admin').eq('id', parsed.id).single()
-    if (!owner?.is_platform_admin) { alert('Accès refusé'); router.push('/dashboard'); return }
+    // Utiliser la valeur déjà stockée dans localStorage
+    if (!parsed.is_platform_admin) { 
+      alert('Accès refusé')
+      router.push('/dashboard')
+      return 
+    }
     
     setUser(parsed)
     fetchAll()
