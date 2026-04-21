@@ -23,7 +23,7 @@ export default function LoginPage() {
 
   async function loadCompanies() {
     const { data, error } = await supabase.rpc('get_companies_list')
-    if (error) { console.error('Companies error:', error); return }
+    if (error) { console.error(error); return }
     setCompanies(data || [])
     if (data && data.length > 0 && !selectedCompany) setSelectedCompany(data[0].id)
   }
@@ -33,7 +33,6 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      // 1. Authentification Supabase
       const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
         email: ownerEmail.trim(),
         password: ownerPassword,
@@ -41,25 +40,22 @@ export default function LoginPage() {
       if (authErr) throw authErr
       if (!authData.user) throw new Error('Utilisateur introuvable')
 
-      console.log('Auth OK, user ID:', authData.user.id)
-
-      // 2. Récupérer owner info via RPC (contourne RLS)
       const { data: ownerData, error: ownerErr } = await supabase.rpc('get_owner_info', {
         p_user_id: authData.user.id
       })
 
-      console.log('Owner data:', ownerData)
-      console.log('Owner error:', ownerErr)
-
       if (ownerErr) throw ownerErr
-      if (!ownerData) throw new Error('Aucune entreprise liée à ce compte. Contactez l\'administrateur.')
+      if (!ownerData) throw new Error('Aucune entreprise liée à ce compte')
 
-      // 3. Récupérer subscription via RPC
       const { data: subData } = await supabase.rpc('get_company_subscription', {
         p_company_id: ownerData.company_id
       })
 
-      // 4. Stocker dans localStorage
+      if (!ownerData.is_platform_admin && (subData?.status === 'cancelled' || subData?.status === 'expired')) {
+        await supabase.auth.signOut()
+        throw new Error('Votre abonnement est suspendu. Contactez RS Comptabilité.')
+      }
+
       localStorage.setItem('user', JSON.stringify({
         id: authData.user.id,
         email: authData.user.email,
@@ -74,7 +70,6 @@ export default function LoginPage() {
 
       router.push('/dashboard')
     } catch (err: any) {
-      console.error('Login error:', err)
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : (err.message || 'Erreur de connexion'))
     }
     setLoading(false)
@@ -108,8 +103,8 @@ export default function LoginPage() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'linear-gradient(135deg, #f8f7f5 0%, #e8e6e0 100%)', fontFamily: 'Outfit, sans-serif' }}>
       <div style={{ width: '100%', maxWidth: 440 }}>
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(135deg, #2563EB, #5B3DF5)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 26, fontWeight: 800, boxShadow: '0 8px 24px rgba(91,61,245,0.3)', marginBottom: 14 }}>A</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: '#1a1916', letterSpacing: '-.5px' }}>ABOU IYAD</div>
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: 'linear-gradient(135deg, #2563EB, #5B3DF5)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 28, fontWeight: 800, boxShadow: '0 10px 30px rgba(91,61,245,0.35)', marginBottom: 16, letterSpacing: '-1px' }}>RSS</div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: '#1a1916', letterSpacing: '-.5px' }}>RSS</div>
           <div style={{ fontSize: 13, color: '#6b6860', marginTop: 4 }}>Système de gestion comptable</div>
         </div>
 
@@ -166,7 +161,7 @@ export default function LoginPage() {
                 <label style={{ fontSize: 12, fontWeight: 500, color: '#6b6860', marginBottom: 6, display: 'block' }}>Entreprise</label>
                 {companies.length === 0 ? (
                   <div style={{ padding: '11px 14px', background: '#fff7ed', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 8, fontSize: 12, color: '#b45309' }}>
-                    Aucune entreprise disponible. Contactez votre administrateur.
+                    Aucune entreprise disponible
                   </div>
                 ) : (
                   <select required value={selectedCompany} onChange={e => setSelectedCompany(e.target.value)}
@@ -194,7 +189,8 @@ export default function LoginPage() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: '#a8a69e' }}>
-          Développé par <strong style={{ color: '#6b6860' }}>RS Comptabilité</strong> · © 2026
+          <strong style={{ color: '#6b6860' }}>RSS</strong> · Développé par <strong style={{ color: '#6b6860' }}>RS Comptabilité</strong><br/>
+          <span style={{ fontSize: 10 }}>Tous droits réservés © 2026</span>
         </div>
       </div>
     </div>

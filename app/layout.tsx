@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ABOU IYAD — Système de gestion',
-  description: 'Développé par RS Comptabilité',
+  title: 'RSS — Système de gestion',
+  description: 'Développé par RS Comptabilité · Tous droits réservés © 2026',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
