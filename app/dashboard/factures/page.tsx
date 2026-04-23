@@ -214,7 +214,7 @@ async function generatePDF(bill: any, settings: any) {
   const [{ data: items }, { data: pays }, { data: freshSettings }] = await Promise.all([
     supabase.from('bill_items').select('*, products(name, description)').eq('bill_id', bill.id),
     supabase.from('payments').select('*, users:created_by(full_name)').eq('bill_id', bill.id).order('created_at', { ascending: true }),
-    supabase.from('settings').select('*').single()
+    supabase.from('settings').select('*').eq('company_id', JSON.parse(localStorage.getItem('user')||'{}').company_id).maybeSingle()
   ])
   const s = freshSettings || settings || {}
   const allItems = items || []
@@ -398,7 +398,7 @@ async function generateReceiptPDF(payment: any, bill: any, settings: any) {
   // Fetch fresh data
   const [{ data: freshBill }, { data: freshSettings }, { data: paidUser }] = await Promise.all([
     supabase.from('bills').select('*, clients(full_name,email,phone,address,wilaya)').eq('id', bill.id).single(),
-    supabase.from('settings').select('*').single(),
+    supabase.from('settings').select('*').eq('company_id', JSON.parse(localStorage.getItem('user')||'{}').company_id).maybeSingle(),
     payment.created_by ? supabase.from('users').select('full_name').eq('id', payment.created_by).single() : Promise.resolve({ data: null })
   ])
   const s = freshSettings || settings || {}
@@ -537,11 +537,13 @@ export default function FacturesPage() {
 
   async function fetchAll() {
     setLoading(true)
+    const user = JSON.parse(localStorage.getItem('user')||'{}')
+    if (!user.company_id) return
     const [{ data: b },{ data: c },{ data: p },{ data: s }] = await Promise.all([
-      supabase.from('bills').select('*, clients(full_name,email,phone,address,wilaya)').eq('is_archived',false).order('created_at',{ascending:false}),
-      supabase.from('clients').select('*').eq('is_archived',false),
-      supabase.from('products').select('*').eq('is_available',true).eq('is_archived',false),
-      supabase.from('settings').select('*').single()
+      supabase.from('bills').select('*, clients(full_name,email,phone,address,wilaya)').eq('company_id', user.company_id).eq('is_archived',false).order('created_at',{ascending:false}),
+      supabase.from('clients').select('*').eq('company_id', user.company_id).eq('is_archived',false),
+      supabase.from('products').select('*').eq('company_id', user.company_id).eq('is_available',true).eq('is_archived',false),
+      supabase.from('settings').select('*').eq('company_id', user.company_id).maybeSingle()
     ])
     setBills(b||[]); setClients(c||[]); setProducts(p||[]); setSettings(s||{})
     setLoading(false)
@@ -549,13 +551,14 @@ export default function FacturesPage() {
 
   async function addClient(data: any) {
     const user = JSON.parse(localStorage.getItem('user')||'{}')
-    const { data: created } = await supabase.from('clients').insert({...data,created_by:user.id}).select().single()
+    const { data: created } = await supabase.from('clients').insert({...data,created_by:user.id,company_id:user.company_id}).select().single()
     await fetchAll()
     return created
   }
 
   async function addProduct(data: any) {
-    const { data: created } = await supabase.from('products').insert({ name:data.name, price:parseFloat(data.price), category:data.category, is_available:true }).select().single()
+    const user = JSON.parse(localStorage.getItem('user')||'{}')
+    const { data: created } = await supabase.from('products').insert({ name:data.name, price:parseFloat(data.price), category:data.category, is_available:true, company_id:user.company_id }).select().single()
     await fetchAll()
     return created
   }
@@ -572,15 +575,7 @@ export default function FacturesPage() {
     setSaving(true)
     try {
       const user = JSON.parse(localStorage.getItem('user')||'{}')
-      const { data: newBill } = await supabase.from('bills').insert({ client_id:form.client_id, total_amount:totalTTC, created_by:user.id }).select().single()
-      if (newBill) {
-        const validItems = form.items.filter((i:any) => i.product_id && i.qty > 0)
-        if (validItems.length > 0) {
-          await supabase.from('bill_items').insert(
-            validItems.map((i:any) => ({ bill_id:newBill.id, product_id:i.product_id, quantity:i.qty, unit_price:i.price }))
-          )
-        }
-      }
+      const { data: newPay } = await supabase.from('payments').insert({ bill_id:selectedBill.id, amount:amt, method:paiForm.method, created_by:user.id, company_id:user.company_id }).select().single()
       setForm({ client_id:'', note:'', date_due:'', items:[{ product_id:'', qty:1, price:0 }] })
       setView('list'); fetchAll()
     } catch (e: any) {

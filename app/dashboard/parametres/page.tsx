@@ -46,7 +46,9 @@ export default function ParametresPage() {
   async function fetch(companyId: string) {
     setLoading(true)
     const { data } = await supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-    if (data) setSettings(data)
+const { data: comp } = await supabase.from('companies').select('slug').eq('id', companyId).maybeSingle()
+if (data) setSettings({ ...data, slug: comp?.slug || '' })
+    
     else {
       // Créer settings si absent
       const { data: created } = await supabase.from('settings').insert({
@@ -151,6 +153,20 @@ export default function ParametresPage() {
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
                 <div style={{gridColumn:'1/-1'}}>
                   <label style={lbl}>Nom de l'entreprise *</label>
+                  <div style={{gridColumn:'1/-1'}}>
+  <label style={lbl}>Lien employés (slug URL)</label>
+  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+    <span style={{fontSize:12,color:'#6b6860',whiteSpace:'nowrap'}}>rss.rscomptabilite.com/</span>
+    <input style={inp} value={settings.slug || ''} onChange={e=>setSettings({...settings,slug:e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'')})}/>
+    <span style={{fontSize:12,color:'#6b6860',whiteSpace:'nowrap'}}>/login</span>
+    <button onClick={async()=>{
+      const { data } = await supabase.rpc('update_company_slug', { p_company_id: user.company_id, p_new_slug: settings.slug })
+      if (data?.success) { alert('✓ Slug mis à jour'); setSettings({...settings, slug: data.slug}) }
+      else alert('Erreur: ' + (data?.error || 'inconnue'))
+    }} style={{padding:'9px 14px',fontSize:12,background:'#2563EB',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>Enregistrer slug</button>
+  </div>
+  {settings.slug && <div style={{fontSize:11,color:'#a8a69e',marginTop:6}}>🔗 Lien à partager : <code style={{background:'#f0eeea',padding:'2px 6px',borderRadius:3}}>rss.rscomptabilite.com/{settings.slug}/login</code></div>}
+</div>
                   <input style={inp} value={settings.company_name||''} onChange={e=>setSettings({...settings,company_name:e.target.value})}/>
                 </div>
                 <div><label style={lbl}>Email</label><input type="email" style={inp} value={settings.email||''} onChange={e=>setSettings({...settings,email:e.target.value})}/></div>
