@@ -18,9 +18,12 @@ export default function PaiementsPage() {
 
   async function fetch() {
     setLoading(true)
+    const u = JSON.parse(localStorage.getItem('user')||'{}')
+    if (!u.company_id) return
     const { data } = await supabase
       .from('payments')
       .select('*, bills(invoice_number, total_amount, paid_amount, status, clients(full_name)), users:created_by(full_name)')
+      .eq('company_id', u.company_id)
       .order('created_at',{ascending:false})
     setPayments(data||[])
     setLoading(false)

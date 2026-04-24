@@ -29,9 +29,11 @@ export default function ProduitsPage() {
 
   async function fetchAll() {
     setLoading(true)
+    const user = JSON.parse(localStorage.getItem('user')||'{}')
+    if (!user.company_id) return
     const [{ data: p }, { data: items }] = await Promise.all([
-      supabase.from('products').select('*').eq('is_archived',false).order('created_at',{ascending:false}),
-      supabase.from('bill_items').select('product_id,quantity,total')
+      supabase.from('products').select('*').eq('company_id', user.company_id).eq('is_archived',false).order('created_at',{ascending:false}),
+      supabase.from('bill_items').select('product_id,quantity,total').eq('company_id', user.company_id)
     ])
     setProducts(p||[])
     const stats: Record<string,any> = {}
@@ -83,7 +85,7 @@ export default function ProduitsPage() {
       if (editing) {
         await supabase.from('products').update(data).eq('id', editing.id)
       } else {
-        await supabase.from('products').insert({ ...data, created_by: user.id })
+        await supabase.from('products').insert({ ...data, created_by: user.id, company_id: user.company_id })
       }
       setShowForm(false)
       fetchAll()

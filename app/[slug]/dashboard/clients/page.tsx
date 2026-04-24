@@ -28,9 +28,11 @@ export default function ClientsPage() {
 
   async function fetchAll() {
     setLoading(true)
+    const user = JSON.parse(localStorage.getItem('user')||'{}')
+    if (!user.company_id) return
     const [{ data: c }, { data: b }] = await Promise.all([
-      supabase.from('clients').select('*').eq('is_archived',false).order('created_at',{ascending:false}),
-      supabase.from('bills').select('client_id,total_amount,paid_amount,status').eq('is_archived',false)
+      supabase.from('clients').select('*').eq('company_id', user.company_id).eq('is_archived',false).order('created_at',{ascending:false}),
+      supabase.from('bills').select('client_id,total_amount,paid_amount,status').eq('company_id', user.company_id).eq('is_archived',false)
     ])
     setClients(c||[])
     // aggregate stats per client
@@ -75,7 +77,7 @@ export default function ClientsPage() {
       if (editing) {
         await supabase.from('clients').update(form).eq('id', editing.id)
       } else {
-        await supabase.from('clients').insert({ ...form, created_by: user.id })
+        await supabase.from('clients').insert({ ...form, created_by: user.id, company_id: user.company_id })
       }
       setShowForm(false)
       fetchAll()
