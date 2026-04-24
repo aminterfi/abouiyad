@@ -402,6 +402,86 @@ export default function FacturesPage() {
 
 useEffect(() => { fetchAll() }, [])
 
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
   // Recharger les settings quand on ouvre le formulaire nouvelle facture
   useEffect(() => {
     if (view === 'new') {
@@ -761,7 +841,8 @@ useEffect(() => { fetchAll() }, [])
   }
 
   const totalHT = form.items.reduce((s:number,i:any) => s+(i.qty*i.price), 0)
-  const tvaRate = settings.tva_rate||19
+  const tvaRate = settings.tva_rate !== undefined && settings.tva_rate !== null ? Number(settings.tva_rate) : 19
+  console.log('🔵 TVA utilisée:', tvaRate, 'settings:', settings)
   const tva = totalHT * tvaRate / 100
   const totalTTC = totalHT + tva
 
@@ -1029,7 +1110,11 @@ useEffect(() => { fetchAll() }, [])
           <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',marginBottom:16}}>Total</div>
           <div style={{background:'#f8f7f5',borderRadius:10,padding:16}}>
             <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:8}}><span>Sous-total HT</span><span style={{fontFamily:'JetBrains Mono,monospace'}}>{dzd(totalHT)}</span></div>
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:12}}><span>TVA ({tvaRate}%)</span><span style={{fontFamily:'JetBrains Mono,monospace'}}>{dzd(tva)}</span></div>
+            {tvaRate > 0 ? (
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:12}}><span>TVA ({tvaRate}%)</span><span style={{fontFamily:'JetBrains Mono,monospace'}}>{dzd(tva)}</span></div>
+            ) : (
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:12,color:'#a8a69e'}}><span>TVA</span><span style={{fontStyle:'italic'}}>Exonéré</span></div>
+            )}
             <div style={{height:1,background:'rgba(0,0,0,0.08)',marginBottom:12}}/>
             <div style={{display:'flex',justifyContent:'space-between',fontSize:17,fontWeight:700}}><span>Total TTC</span><span style={{fontFamily:'JetBrains Mono,monospace',color:'#2563EB'}}>{dzd(totalTTC)}</span></div>
           </div>
