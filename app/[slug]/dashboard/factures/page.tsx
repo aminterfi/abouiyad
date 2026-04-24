@@ -204,99 +204,153 @@ async function generatePDF(bill: any, settings: any) {
   const allItems = items || []
   const allPays = pays || []
 
-  const win = window.open('', '_blank', 'width=850,height=950')
+  const win = window.open('', '_blank', 'width=900,height=1000')
   if (!win) { alert('Autorisez les popups'); return }
 
   const totalHT = allItems.reduce((sum: number, i: any) => sum + (i.quantity * i.unit_price), 0)
-  const tvaRate = s.tva_rate || 19
+  const tvaRate = s.tva_rate !== undefined && s.tva_rate !== null ? Number(s.tva_rate) : 19
   const tva = totalHT * tvaRate / 100
   const color = s.primary_color || '#2563EB'
   const company = s.company_name || 'RSS'
+  const due = bill.due_date ? new Date(bill.due_date).toLocaleDateString('fr-DZ') : '—'
+  const solde = bill.total_amount - bill.paid_amount
 
   win.document.write(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>${bill.invoice_number}</title>
+<html lang="fr"><head><meta charset="UTF-8"><title>${bill.invoice_number}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}
-body{background:#f5f5f5;padding:20px;color:#1a1916}
-.page{background:#fff;max-width:210mm;margin:0 auto;padding:45px;box-shadow:0 4px 20px rgba(0,0,0,0.1);border-radius:4px}
-.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid ${color};padding-bottom:22px;margin-bottom:30px}
-.company-info h1{font-size:24px;color:${color};margin-bottom:6px;font-weight:700}
-.company-info p{font-size:11px;color:#555;line-height:1.6}
-.doc-info{text-align:right;min-width:220px}
-.doc-info h2{font-size:32px;color:#1a1916;margin-bottom:8px;letter-spacing:2px;font-weight:700}
-.doc-info .num{font-family:monospace;color:${color};font-weight:700;font-size:15px;background:${color}15;padding:6px 12px;border-radius:6px;display:inline-block;margin-bottom:6px}
-.client-section{background:#fafaf8;border-left:4px solid ${color};padding:18px 22px;border-radius:6px;margin-bottom:26px}
-.client-section .label{font-size:10px;color:${color};text-transform:uppercase;font-weight:700;margin-bottom:8px}
-.client-section .name{font-size:16px;font-weight:700;margin-bottom:6px}
-table{width:100%;border-collapse:collapse;margin-bottom:24px;border-radius:6px;overflow:hidden}
-thead th{background:${color};color:#fff;padding:12px 14px;text-align:left;font-size:11px;text-transform:uppercase;font-weight:600}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',-apple-system,sans-serif}
+body{background:#f1f5f9;padding:30px 20px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{background:#fff;max-width:210mm;margin:0 auto;padding:0;box-shadow:0 20px 60px rgba(0,0,0,0.08);border-radius:2px;position:relative;overflow:hidden}
+.accent-bar{height:8px;background:linear-gradient(90deg, ${color}, ${color}cc, ${color});width:100%}
+.inner{padding:50px 55px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:45px}
+.brand{display:flex;align-items:center;gap:16px}
+.brand-logo{width:64px;height:64px;border-radius:12px;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:26px;letter-spacing:-1px;box-shadow:0 8px 20px ${color}40}
+.brand-logo img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px}
+.brand-info .name{font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-.5px;margin-bottom:3px}
+.brand-info .tag{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:600}
+.brand-info .meta{font-size:11px;color:#64748b;margin-top:8px;line-height:1.6}
+.doc-label{text-align:right}
+.doc-label .type{font-size:11px;color:${color};text-transform:uppercase;letter-spacing:3px;font-weight:700;margin-bottom:8px}
+.doc-label h1{font-size:42px;font-weight:800;color:#0f172a;letter-spacing:-1.5px;line-height:1;margin-bottom:12px}
+.doc-label .num{display:inline-block;background:${color}12;color:${color};padding:8px 16px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px}
+.dates-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;margin-bottom:32px;padding:18px 22px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0}
+.dates-grid .label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:4px}
+.dates-grid .value{font-size:13px;color:#0f172a;font-weight:600}
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:35px}
+.party{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;position:relative;overflow:hidden}
+.party::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:${color}}
+.party .label{font-size:10px;color:${color};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:10px}
+.party .name{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:8px}
+.party .contact{font-size:12px;color:#475569;line-height:1.7}
+table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:30px}
+thead th{background:#0f172a;color:#fff;padding:14px 18px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px}
 thead th.right{text-align:right}
-tbody td{padding:12px 14px;border-bottom:1px solid #eee;font-size:12px}
-tbody td.right{text-align:right;font-family:monospace;font-weight:600}
-.totals-box{min-width:300px;background:#fafaf8;border-radius:8px;overflow:hidden;margin-left:auto;margin-bottom:30px}
-.totals-box .row{display:flex;justify-content:space-between;padding:10px 18px;font-size:13px}
-.totals-box .row.total{background:${color};color:#fff;font-weight:700;font-size:16px;padding:14px 18px}
-.totals-box .mono{font-family:monospace}
-.footer{border-top:2px solid ${color};padding-top:18px;margin-top:40px;font-size:10px;color:#777;text-align:center}
-.footer strong{color:${color}}
-@media print {body{background:#fff;padding:0}.page{box-shadow:none}.no-print{display:none !important}}
-.toolbar{position:fixed;top:15px;right:15px;display:flex;gap:10px;z-index:100;background:#fff;padding:10px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15)}
-.toolbar button{padding:9px 18px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600}
-.btn-print{background:${color};color:#fff}.btn-close{background:#f5f5f5;color:#666;border:1px solid #ddd}
+tbody tr:nth-child(even){background:#f8fafc}
+tbody td{padding:14px 18px;font-size:13px;color:#0f172a;border-bottom:1px solid #f1f5f9}
+tbody td.right{text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600}
+tbody td .item-name{font-weight:600;color:#0f172a}
+tbody tr:last-child td{border-bottom:none}
+.summary{display:grid;grid-template-columns:1fr 360px;gap:25px;margin-top:30px;align-items:start}
+.totals{background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}
+.totals .row{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;font-size:13px;color:#475569;border-bottom:1px solid #e2e8f0}
+.totals .row .amount{font-family:'JetBrains Mono',monospace;font-weight:600;color:#0f172a}
+.totals .row.total{background:${color};color:#fff;padding:16px 22px;border-bottom:none}
+.totals .row.total .label{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:1.2px}
+.totals .row.total .amount{color:#fff;font-size:20px;font-weight:800}
+.totals .row.paid{background:#f0fdf4;color:#15803d}
+.totals .row.paid .amount{color:#15803d}
+.totals .row.balance.pending{background:#fff7ed;color:#c2410c;padding:16px 22px}
+.totals .row.balance.pending .amount{color:#c2410c;font-weight:800;font-size:16px}
+.totals .row.balance.done{background:#f0fdf4;color:#15803d;padding:16px 22px}
+.totals .row.balance.done .amount{color:#15803d;font-weight:800;font-size:16px}
+.footer{margin-top:45px;padding-top:25px;border-top:2px solid #e2e8f0;text-align:center}
+.footer .msg{font-size:12px;color:#475569;font-style:italic;margin-bottom:12px;line-height:1.6}
+.footer .brand-credit{font-size:10px;color:#94a3b8;margin-top:12px}
+.footer .brand-credit strong{color:${color};font-weight:700}
+.stamp{position:absolute;bottom:180px;right:65px;border:3px solid ${color};color:${color};padding:12px 20px;font-size:14px;font-weight:800;letter-spacing:2px;transform:rotate(-12deg);opacity:.3;border-radius:6px;text-transform:uppercase}
+@media print {body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.toolbar{display:none !important}}
+.toolbar{position:fixed;top:20px;right:20px;display:flex;gap:10px;z-index:100;background:#fff;padding:10px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12)}
+.toolbar button{padding:10px 20px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:600}
+.btn-print{background:${color};color:#fff}
+.btn-close{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
 </style></head><body>
-<div class="toolbar no-print">
-  <button class="btn-print" onclick="window.print()">🖨 Imprimer</button>
-  <button class="btn-close" onclick="window.close()">✕</button>
+<div class="toolbar">
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer / PDF</button>
+  <button class="btn-close" onclick="window.close()">✕ Fermer</button>
 </div>
 <div class="page">
-  <div class="header">
-    <div class="company-info">
-      ${s.logo_url ? `<img src="${s.logo_url}" style="max-height:60px;margin-bottom:8px"/>` : ''}
-      <h1>${company}</h1>
-      <p>
-        ${s.address ? `${s.address}<br>` : ''}
-        ${s.phone ? `📞 ${s.phone}` : ''} ${s.email ? `· ✉ ${s.email}` : ''}<br>
-        ${s.tax_number ? `NIF/RC : ${s.tax_number}` : ''}
-      </p>
+  <div class="accent-bar"></div>
+  <div class="inner">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-logo">${s.logo_url ? `<img src="${s.logo_url}" alt="${company}"/>` : company.charAt(0)}</div>
+        <div class="brand-info">
+          <div class="name">${company}</div>
+          <div class="tag">${s.tax_number ? 'NIF/RC ' + s.tax_number : 'Entreprise'}</div>
+          <div class="meta">
+            ${s.address ? `<div>📍 ${s.address}</div>` : ''}
+            ${s.phone ? `<div>📞 ${s.phone}</div>` : ''}
+            ${s.email ? `<div>✉ ${s.email}</div>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="doc-label">
+        <div class="type">Document</div>
+        <h1>FACTURE</h1>
+        <div class="num">${bill.invoice_number}</div>
+      </div>
     </div>
-    <div class="doc-info">
-      <h2>FACTURE</h2>
-      <div class="num">${bill.invoice_number}</div>
-      <div style="font-size:11px;color:#666;margin-top:8px">Émise le ${new Date(bill.created_at).toLocaleDateString('fr-DZ')}</div>
+    <div class="dates-grid">
+      <div><div class="label">Date d'émission</div><div class="value">${new Date(bill.created_at).toLocaleDateString('fr-DZ', { day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
+      <div><div class="label">Date d'échéance</div><div class="value">${due}</div></div>
+      <div><div class="label">Statut</div><div class="value" style="color:${bill.status==='payé'?'#16a34a':bill.status==='partiel'?'#d97706':'#dc2626'};font-weight:700;text-transform:uppercase">● ${bill.status}</div></div>
     </div>
-  </div>
-  <div class="client-section">
-    <div class="label">Facturé à</div>
-    <div class="name">${bill.clients?.full_name || ''}</div>
-    ${bill.clients?.phone ? `<div>☎ ${bill.clients.phone}</div>` : ''}
-    ${bill.clients?.address ? `<div>📍 ${bill.clients.address}${bill.clients.wilaya ? `, ${bill.clients.wilaya}` : ''}</div>` : ''}
-  </div>
-  <table>
-    <thead><tr><th style="width:50%">Désignation</th><th class="right">Qté</th><th class="right">Prix HT</th><th class="right">Total HT</th></tr></thead>
-    <tbody>
-      ${allItems.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:#999;padding:30px">Facture globale</td></tr>` : allItems.map((i: any) => `
-        <tr>
-          <td><strong>${i.products?.name || 'Article'}</strong></td>
-          <td class="right">${i.quantity}</td>
-          <td class="right">${i.unit_price.toLocaleString('fr-DZ')} DZD</td>
-          <td class="right">${i.total.toLocaleString('fr-DZ')} DZD</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
-  <div class="totals-box">
-    ${allItems.length > 0 ? `
-      <div class="row"><span>Sous-total HT</span><span class="mono">${totalHT.toLocaleString('fr-DZ')} DZD</span></div>
-      <div class="row"><span>TVA (${tvaRate}%)</span><span class="mono">${tva.toLocaleString('fr-DZ')} DZD</span></div>
-    ` : ''}
-    <div class="row total"><span>TOTAL TTC</span><span class="mono">${bill.total_amount.toLocaleString('fr-DZ')} DZD</span></div>
-    ${bill.paid_amount > 0 ? `<div class="row" style="background:#f0fdf4;color:#15803d"><span>Payé</span><span class="mono">${bill.paid_amount.toLocaleString('fr-DZ')} DZD</span></div>` : ''}
-    ${bill.total_amount - bill.paid_amount > 0 ? `<div class="row" style="background:#fff7ed;color:#d97706"><span>Solde restant</span><span class="mono">${(bill.total_amount - bill.paid_amount).toLocaleString('fr-DZ')} DZD</span></div>` : ''}
-  </div>
-  <div class="footer">
-    ${s.footer_text || 'Merci de votre confiance.'}<br><br>
-    <strong>${company}</strong> — Propulsé par <strong>RSS</strong> · Développé par <strong>RS Comptabilité</strong><br>
-    <span style="font-size:9px">Tous droits réservés © 2026</span>
+    <div class="parties">
+      <div class="party">
+        <div class="label">Émis par</div>
+        <div class="name">${company}</div>
+        <div class="contact">${s.address || ''}<br>${s.phone ? `Tél : ${s.phone}<br>` : ''}${s.email ? `Email : ${s.email}` : ''}</div>
+      </div>
+      <div class="party">
+        <div class="label">Facturé à</div>
+        <div class="name">${bill.clients?.full_name || '—'}</div>
+        <div class="contact">${bill.clients?.address ? `${bill.clients.address}${bill.clients.wilaya ? ', ' + bill.clients.wilaya : ''}<br>` : ''}${bill.clients?.phone ? `Tél : ${bill.clients.phone}<br>` : ''}${bill.clients?.email ? `Email : ${bill.clients.email}` : ''}</div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th style="width:50%">Désignation</th><th class="right">Qté</th><th class="right">Prix unit.</th><th class="right">Total HT</th></tr></thead>
+      <tbody>
+        ${allItems.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:40px;font-style:italic">Aucune ligne</td></tr>` : allItems.map((i: any) => `
+          <tr>
+            <td><div class="item-name">${i.products?.name || 'Article'}</div>${i.products?.description ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${i.products.description}</div>` : ''}</td>
+            <td class="right">${i.quantity}</td>
+            <td class="right">${i.unit_price.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })}</td>
+            <td class="right" style="color:${color}">${(i.quantity * i.unit_price).toLocaleString('fr-DZ', { minimumFractionDigits: 2 })}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    <div class="summary">
+      <div>${bill.notes ? `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:16px 20px"><div style="font-size:10px;color:#a16207;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:8px">📝 Note</div><div style="font-size:12px;color:#78350f;line-height:1.6">${bill.notes}</div></div>` : ''}</div>
+      <div class="totals">
+        ${allItems.length > 0 ? `
+          <div class="row"><span>Sous-total HT</span><span class="amount">${totalHT.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+          ${tvaRate > 0 ? `<div class="row"><span>TVA (${tvaRate}%)</span><span class="amount">${tva.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>` : `<div class="row" style="background:#fef2f2;color:#991b1b"><span>TVA</span><span class="amount" style="font-style:italic">Exonéré</span></div>`}
+        ` : ''}
+        <div class="row total"><span class="label">Total TTC</span><span class="amount">${bill.total_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+        ${bill.paid_amount > 0 ? `<div class="row paid"><span>✓ Payé</span><span class="amount">${bill.paid_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>` : ''}
+        <div class="row balance ${solde > 0 ? 'pending' : 'done'}"><span>${solde > 0 ? 'Solde restant dû' : '✓ Facture réglée'}</span><span class="amount">${solde.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+      </div>
+    </div>
+    ${bill.status === 'payé' ? '<div class="stamp">PAYÉ</div>' : ''}
+    <div class="footer">
+      <div class="msg">${s.footer_text || 'Merci de votre confiance.'}</div>
+      <div class="brand-credit"><strong>${company}</strong> · Propulsé par <strong>RSS</strong> · Développé par <strong>RS Comptabilité</strong><br><span style="font-size:9px;color:#cbd5e1">Tous droits réservés © 2026</span></div>
+    </div>
   </div>
 </div>
 </body></html>`)
@@ -311,7 +365,6 @@ async function generateReceiptPDF(payment: any, bill: any, settings: any) {
   ])
   const s = freshSettings || settings || {}
   const b = freshBill || bill
-
   const win = window.open('', '_blank', 'width=750,height=900')
   if (!win) { alert('Autorisez les popups'); return }
   const color = s.primary_color || '#2563EB'
@@ -329,7 +382,6 @@ body{background:#f5f5f5;padding:20px}
 .header h2{font-size:14px;background:rgba(255,255,255,0.2);display:inline-block;padding:6px 20px;border-radius:20px;margin-top:14px}
 .content{padding:30px}
 .big-amount{background:#f0fdf4;border:3px dashed #16a34a;border-radius:12px;padding:28px;text-align:center;margin-bottom:24px}
-.big-amount .label{font-size:11px;color:#16a34a;text-transform:uppercase;font-weight:700;margin-bottom:8px}
 .big-amount .val{font-size:36px;color:#15803d;font-family:monospace;font-weight:700}
 .section{background:#fafaf8;border-radius:8px;padding:16px 20px;margin-bottom:14px}
 .info-row{display:flex;justify-content:space-between;padding:7px 0;font-size:12px;border-bottom:1px dashed #e5e5e5}
@@ -352,11 +404,9 @@ body{background:#f5f5f5;padding:20px}
     <h2>REÇU DE PAIEMENT</h2>
   </div>
   <div class="content">
-    <div style="text-align:center;margin-bottom:20px;color:#999;font-size:11px;font-family:monospace">
-      Référence <strong style="color:${color};background:${color}15;padding:4px 12px;border-radius:6px">#${refNum}</strong>
-    </div>
+    <div style="text-align:center;margin-bottom:20px;color:#999;font-size:11px;font-family:monospace">Référence <strong style="color:${color};background:${color}15;padding:4px 12px;border-radius:6px">#${refNum}</strong></div>
     <div class="big-amount">
-      <div class="label">Montant encaissé</div>
+      <div style="font-size:11px;color:#16a34a;text-transform:uppercase;font-weight:700;margin-bottom:8px">Montant encaissé</div>
       <div class="val">${payment.amount.toLocaleString('fr-DZ')} DZD</div>
       <div style="margin-top:10px;display:inline-block;background:#fff;color:#16a34a;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #86efac">${payment.method}</div>
     </div>
@@ -372,11 +422,7 @@ body{background:#f5f5f5;padding:20px}
       <div style="font-size:18px;font-family:monospace;font-weight:700;color:${b.total_amount - b.paid_amount > 0 ? '#d97706' : '#15803d'}">${(b.total_amount - b.paid_amount).toLocaleString('fr-DZ')} DZD</div>
     </div>
   </div>
-  <div class="footer">
-    <strong>${company}</strong><br>
-    Propulsé par <strong>RSS</strong> · Développé par <strong>RS Comptabilité</strong><br>
-    <span style="font-size:9px">Tous droits réservés © 2026</span>
-  </div>
+  <div class="footer"><strong>${company}</strong><br>Propulsé par <strong>RSS</strong> · Développé par <strong>RS Comptabilité</strong><br><span style="font-size:9px">© 2026</span></div>
 </div>
 </body></html>`)
   win.document.close()
@@ -400,408 +446,8 @@ export default function FacturesPage() {
   const [form, setForm] = useState<any>({ client_id:'', note:'', date_due:'', items:[{ product_id:'', qty:1, price:0 }] })
   const [paiForm, setPaiForm] = useState({ amount:'', method:'Virement CPA', note:'' })
 
-useEffect(() => { fetchAll() }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
-  useEffect(() => {
-    if (view === 'new') {
-      const companyId = getCompanyId()
-      if (companyId) {
-        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-          .then(({ data }) => { if (data) setSettings(data) })
-      }
-    }
-  }, [view])
-
-  // Recharger les settings quand on ouvre le formulaire nouvelle facture
   useEffect(() => {
     if (view === 'new') {
       const companyId = getCompanyId()
@@ -842,7 +488,6 @@ useEffect(() => { fetchAll() }, [])
 
   const totalHT = form.items.reduce((s:number,i:any) => s+(i.qty*i.price), 0)
   const tvaRate = settings.tva_rate !== undefined && settings.tva_rate !== null ? Number(settings.tva_rate) : 19
-  console.log('🔵 TVA utilisée:', tvaRate, 'settings:', settings)
   const tva = totalHT * tvaRate / 100
   const totalTTC = totalHT + tva
 
@@ -854,39 +499,24 @@ useEffect(() => { fetchAll() }, [])
     try {
       const user = JSON.parse(localStorage.getItem('user')||'{}')
       if (!user.company_id) { setError('Company ID manquant'); setSaving(false); return }
-      
       const { data: newBill, error: billErr } = await supabase.from('bills').insert({
-        client_id: form.client_id,
-        total_amount: totalTTC,
-        created_by: user.id,
-        company_id: user.company_id,
-        notes: form.note,
-        due_date: form.date_due || null
+        client_id: form.client_id, total_amount: totalTTC, created_by: user.id,
+        company_id: user.company_id, notes: form.note, due_date: form.date_due || null
       }).select().single()
-      
       if (billErr) throw billErr
-      
       if (newBill) {
         const validItems = form.items.filter((i:any) => i.product_id && i.qty > 0)
         if (validItems.length > 0) {
-          await supabase.from('bill_items').insert(
-            validItems.map((i:any) => ({
-              bill_id: newBill.id,
-              product_id: i.product_id,
-              quantity: i.qty,
-              unit_price: i.price,
-              company_id: user.company_id
-            }))
-          )
+          await supabase.from('bill_items').insert(validItems.map((i:any) => ({
+            bill_id: newBill.id, product_id: i.product_id, quantity: i.qty,
+            unit_price: i.price, company_id: user.company_id
+          })))
         }
       }
-      
       setForm({ client_id:'', note:'', date_due:'', items:[{ product_id:'', qty:1, price:0 }] })
       setView('list')
       fetchAll()
-    } catch (e: any) {
-      setError(e.message || 'Erreur')
-    }
+    } catch (e: any) { setError(e.message || 'Erreur') }
     setSaving(false)
   }
 
@@ -899,14 +529,9 @@ useEffect(() => { fetchAll() }, [])
     setSaving(true)
     const user = JSON.parse(localStorage.getItem('user')||'{}')
     const { data: newPay } = await supabase.from('payments').insert({
-      bill_id: selectedBill.id,
-      amount: amt,
-      method: paiForm.method,
-      notes: paiForm.note,
-      created_by: user.id,
-      company_id: user.company_id
+      bill_id: selectedBill.id, amount: amt, method: paiForm.method,
+      notes: paiForm.note, created_by: user.id, company_id: user.company_id
     }).select().single()
-    
     setTimeout(() => {
       if (newPay) generateReceiptPDF({...newPay, created_at:new Date().toISOString()}, {...selectedBill, paid_amount:selectedBill.paid_amount+amt}, settings)
     }, 300)
@@ -954,34 +579,26 @@ useEffect(() => { fetchAll() }, [])
   const filtered = bills.filter(b => {
     const ms = filter==='tous'||b.status===filter
     const mq = !search || b.invoice_number?.toLowerCase().includes(search.toLowerCase()) || b.clients?.full_name?.toLowerCase().includes(search.toLowerCase())
-    const d = new Date(b.created_at)
-    const now = new Date()
-    const mp = period==='tout' ||
-      (period==='jour' && d.toDateString()===now.toDateString()) ||
-      (period==='semaine' && (now.getTime()-d.getTime())<7*86400000) ||
-      (period==='mois' && d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear())
-    return ms && mq && mp
+    return ms && mq
   })
 
   const totalCA = filtered.reduce((s,b) => s + (b.total_amount||0), 0)
   const totalPaid = filtered.reduce((s,b) => s + (b.paid_amount||0), 0)
   const totalUnpaid = totalCA - totalPaid
 
-  // ===== DETAIL VIEW =====
   if (view === 'detail' && selectedBill) {
     return (
       <div style={{minHeight:'100vh',background:'#f5f4f1',margin:-22,padding:0}}>
         <div style={{background:'#1a1916',padding:'0 28px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:50}}>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
             <button onClick={()=>{setView('list');setSelectedBill(null)}} style={{background:'rgba(255,255,255,0.08)',border:'none',color:'#fff',borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:13}}>← Retour</button>
-            <div><div style={{color:'#fff',fontSize:14,fontWeight:600}}>{selectedBill.invoice_number}</div></div>
+            <div style={{color:'#fff',fontSize:14,fontWeight:600}}>{selectedBill.invoice_number}</div>
           </div>
           <div style={{display:'flex',gap:8}}>
             <button style={btnG} onClick={()=>generatePDF(selectedBill, settings)}>📄 PDF</button>
             {selectedBill.status !== 'payé' && <button style={btnGr} onClick={()=>setView('pay')}>Encaisser</button>}
           </div>
         </div>
-
         <div style={{maxWidth:1000,margin:'0 auto',padding:'28px 24px'}}>
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:12,padding:24,marginBottom:16,display:'flex',justifyContent:'space-between'}}>
             <div>
@@ -990,7 +607,6 @@ useEffect(() => { fetchAll() }, [])
             </div>
             <StatusBadge s={selectedBill.status}/>
           </div>
-
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:16}}>
             <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:20}}>
               <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',marginBottom:10}}>Client</div>
@@ -1004,35 +620,24 @@ useEffect(() => { fetchAll() }, [])
               <div style={{display:'flex',justifyContent:'space-between',fontSize:15,fontWeight:700,borderTop:'1px solid rgba(0,0,0,0.08)',paddingTop:6,marginTop:6}}><span>Solde</span><span style={{fontFamily:'JetBrains Mono,monospace',color:selectedBill.total_amount-selectedBill.paid_amount>0?'#d97706':'#16a34a'}}>{dzd(selectedBill.total_amount-selectedBill.paid_amount)}</span></div>
             </div>
           </div>
-
           {detailItems.length > 0 && (
             <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,overflow:'hidden',marginBottom:16}}>
               <div style={{padding:'14px 20px',borderBottom:'1px solid rgba(0,0,0,0.07)',fontSize:13,fontWeight:600}}>Lignes</div>
               <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead>
-                  <tr style={{background:'#f8f7f5'}}>
-                    <th style={{textAlign:'left',padding:'10px 20px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Désignation</th>
-                    <th style={{textAlign:'right',padding:'10px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Qté</th>
-                    <th style={{textAlign:'right',padding:'10px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Prix</th>
-                    <th style={{textAlign:'right',padding:'10px 20px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Total</th>
+                <thead><tr style={{background:'#f8f7f5'}}><th style={{textAlign:'left',padding:'10px 20px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Désignation</th><th style={{textAlign:'right',padding:'10px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Qté</th><th style={{textAlign:'right',padding:'10px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Prix</th><th style={{textAlign:'right',padding:'10px 20px',fontSize:11,color:'#a8a69e',textTransform:'uppercase'}}>Total</th></tr></thead>
+                <tbody>{detailItems.map(i => (
+                  <tr key={i.id} style={{borderBottom:'1px solid rgba(0,0,0,0.04)'}}>
+                    <td style={{padding:'12px 20px',fontSize:13}}>{i.products?.name||'—'}</td>
+                    <td style={{padding:'12px',fontSize:13,textAlign:'right',fontFamily:'JetBrains Mono,monospace'}}>{i.quantity}</td>
+                    <td style={{padding:'12px',fontSize:13,textAlign:'right',fontFamily:'JetBrains Mono,monospace'}}>{dzd(i.unit_price)}</td>
+                    <td style={{padding:'12px 20px',fontSize:13,textAlign:'right',fontFamily:'JetBrains Mono,monospace',fontWeight:600}}>{dzd(i.total)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {detailItems.map(i => (
-                    <tr key={i.id} style={{borderBottom:'1px solid rgba(0,0,0,0.04)'}}>
-                      <td style={{padding:'12px 20px',fontSize:13}}>{i.products?.name||'—'}</td>
-                      <td style={{padding:'12px',fontSize:13,textAlign:'right',fontFamily:'JetBrains Mono,monospace'}}>{i.quantity}</td>
-                      <td style={{padding:'12px',fontSize:13,textAlign:'right',fontFamily:'JetBrains Mono,monospace'}}>{dzd(i.unit_price)}</td>
-                      <td style={{padding:'12px 20px',fontSize:13,textAlign:'right',fontFamily:'JetBrains Mono,monospace',fontWeight:600}}>{dzd(i.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
+                ))}</tbody>
               </table>
             </div>
           )}
-
           {detailPayments.length > 0 && (
-            <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px',marginBottom:16}}>
+            <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:20,marginBottom:16}}>
               <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Paiements ({detailPayments.length})</div>
               {detailPayments.map(p => (
                 <div key={p.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'#f8f7f5',borderRadius:6,marginBottom:6}}>
@@ -1053,7 +658,6 @@ useEffect(() => { fetchAll() }, [])
     )
   }
 
-  // ===== NEW BILL =====
   if (view === 'new') return (
     <div style={{minHeight:'100vh',background:'#f5f4f1',margin:-22,padding:0}}>
       <div style={{background:'#1a1916',padding:'0 28px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:50}}>
@@ -1066,11 +670,9 @@ useEffect(() => { fetchAll() }, [])
           <button style={btnP} onClick={saveBill} disabled={saving}>{saving ? '...' : 'Enregistrer'}</button>
         </div>
       </div>
-
       <div style={{display:'grid',gridTemplateColumns:'1fr 340px',height:'calc(100vh - 56px)'}}>
         <div style={{overflowY:'auto',padding:'28px 32px'}}>
           {error && <div style={{background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.2)',borderRadius:8,padding:'12px 14px',fontSize:13,color:'#dc2626',marginBottom:20}}>{error}</div>}
-
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px',marginBottom:16}}>
             <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',marginBottom:14}}>Client & Dates</div>
             <label style={lbl}>Client <span style={{color:'#dc2626'}}>*</span></label>
@@ -1080,7 +682,6 @@ useEffect(() => { fetchAll() }, [])
               <input type="date" style={inp} value={form.date_due} onChange={e=>setForm({...form,date_due:e.target.value})}/>
             </div>
           </div>
-
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px',marginBottom:16}}>
             <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',marginBottom:14}}>Produits & Services</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 70px 100px 100px 36px',gap:8,marginBottom:8}}>
@@ -1095,17 +696,13 @@ useEffect(() => { fetchAll() }, [])
                 <button onClick={()=>{if(form.items.length>1)setForm({...form,items:form.items.filter((_:any,i:number)=>i!==idx)})}} style={{width:32,height:32,borderRadius:6,background:'rgba(220,38,38,0.08)',border:'1px solid rgba(220,38,38,0.15)',color:'#dc2626',cursor:'pointer',fontSize:18}}>×</button>
               </div>
             ))}
-            <button onClick={()=>setForm({...form,items:[...form.items,{product_id:'',qty:1,price:0}]})} style={{width:'100%',padding:11,fontSize:13,color:'#2563EB',background:'rgba(37,99,235,0.04)',border:'1px dashed rgba(37,99,235,0.25)',borderRadius:8,cursor:'pointer',marginTop:4}}>
-              + Ajouter une ligne
-            </button>
+            <button onClick={()=>setForm({...form,items:[...form.items,{product_id:'',qty:1,price:0}]})} style={{width:'100%',padding:11,fontSize:13,color:'#2563EB',background:'rgba(37,99,235,0.04)',border:'1px dashed rgba(37,99,235,0.25)',borderRadius:8,cursor:'pointer',marginTop:4}}>+ Ajouter une ligne</button>
           </div>
-
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px'}}>
             <label style={lbl}>Note</label>
             <textarea style={{...inp,minHeight:80}} rows={3} placeholder="Note..." value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/>
           </div>
         </div>
-
         <div style={{background:'#fff',borderLeft:'1px solid rgba(0,0,0,0.07)',padding:'24px 20px'}}>
           <div style={{fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',marginBottom:16}}>Total</div>
           <div style={{background:'#f8f7f5',borderRadius:10,padding:16}}>
@@ -1124,7 +721,6 @@ useEffect(() => { fetchAll() }, [])
     </div>
   )
 
-  // ===== PAY =====
   if (view === 'pay' && selectedBill) return (
     <div style={{minHeight:'100vh',background:'#f5f4f1',margin:-22,padding:0}}>
       <div style={{background:'#1a1916',padding:'0 28px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -1136,31 +732,27 @@ useEffect(() => { fetchAll() }, [])
       </div>
       <div style={{maxWidth:700,margin:'0 auto',padding:'32px 24px'}}>
         {error && <div style={{background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.2)',borderRadius:8,padding:'12px 14px',fontSize:13,color:'#dc2626',marginBottom:20}}>{error}</div>}
-
-        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'24px',marginBottom:16}}>
+        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:24,marginBottom:16}}>
           <label style={lbl}>Montant (DZD) *</label>
           <input type="number" style={{...inp,fontSize:24,fontWeight:700,height:60}} placeholder="0" value={paiForm.amount} onChange={e=>setPaiForm({...paiForm,amount:e.target.value})}/>
           <div style={{display:'flex',gap:8,marginTop:10}}>
             {[25,50,75,100].map(pct=>{ const rem=selectedBill.total_amount-selectedBill.paid_amount; return (
-              <button key={pct} onClick={()=>setPaiForm({...paiForm,amount:String(Math.round(rem*pct/100))})} style={{flex:1,padding:'8px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px solid rgba(37,99,235,0.2)',background:'rgba(37,99,235,0.05)',color:'#2563EB'}}>{pct}%</button>
+              <button key={pct} onClick={()=>setPaiForm({...paiForm,amount:String(Math.round(rem*pct/100))})} style={{flex:1,padding:8,borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px solid rgba(37,99,235,0.2)',background:'rgba(37,99,235,0.05)',color:'#2563EB'}}>{pct}%</button>
             )})}
           </div>
         </div>
-
         <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px',marginBottom:16}}>
           <label style={lbl}>Méthode</label>
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginTop:8}}>
             {['Virement CPA','Virement BNA','BaridiMob','Chèque','Espèces','Autre'].map(m=>(
-              <button key={m} onClick={()=>setPaiForm({...paiForm,method:m})} style={{padding:'12px',borderRadius:8,fontSize:12,cursor:'pointer',border:`2px solid ${paiForm.method===m?'#2563EB':'rgba(0,0,0,0.1)'}`,background:paiForm.method===m?'rgba(37,99,235,0.07)':'#fff',color:paiForm.method===m?'#2563EB':'#6b6860'}}>{m}</button>
+              <button key={m} onClick={()=>setPaiForm({...paiForm,method:m})} style={{padding:12,borderRadius:8,fontSize:12,cursor:'pointer',border:`2px solid ${paiForm.method===m?'#2563EB':'rgba(0,0,0,0.1)'}`,background:paiForm.method===m?'rgba(37,99,235,0.07)':'#fff',color:paiForm.method===m?'#2563EB':'#6b6860'}}>{m}</button>
             ))}
           </div>
         </div>
-
         <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'20px 24px',marginBottom:16}}>
           <label style={lbl}>Note</label>
           <textarea style={{...inp,minHeight:60}} value={paiForm.note} onChange={e=>setPaiForm({...paiForm,note:e.target.value})}/>
         </div>
-
         <div style={{background:'rgba(217,119,6,0.08)',border:'2px solid rgba(217,119,6,0.2)',borderRadius:10,padding:14,textAlign:'center'}}>
           <div style={{fontSize:11,fontWeight:700,color:'#b45309',textTransform:'uppercase',marginBottom:6}}>Solde restant</div>
           <div style={{fontSize:26,fontWeight:800,color:'#d97706',fontFamily:'JetBrains Mono,monospace'}}>{dzd(selectedBill.total_amount-selectedBill.paid_amount)}</div>
@@ -1169,7 +761,6 @@ useEffect(() => { fetchAll() }, [])
     </div>
   )
 
-  // ===== LIST =====
   return (
     <div>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:12}}>
@@ -1182,7 +773,6 @@ useEffect(() => { fetchAll() }, [])
           <button style={btnP} onClick={()=>setView('new')}>+ Nouvelle facture</button>
         </div>
       </div>
-
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:16}}>
         {[
           { label:'Factures', val:filtered.length, color:'#1a1916' },
@@ -1196,14 +786,12 @@ useEffect(() => { fetchAll() }, [])
           </div>
         ))}
       </div>
-
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}>
         <input style={{padding:'7px 11px',borderRadius:5,border:'1px solid rgba(0,0,0,0.14)',fontSize:13,flex:1,minWidth:180,maxWidth:300,fontFamily:'Outfit,sans-serif'}} placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)}/>
         {['tous','impayé','partiel','payé'].map(f=>(
           <button key={f} onClick={()=>setFilter(f)} style={{...btnSm,border:'1px solid rgba(0,0,0,0.14)',background:filter===f?'#2563EB':'#fff',color:filter===f?'#fff':'#6b6860'}}>{f}</button>
         ))}
       </div>
-
       <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.08)',borderRadius:8,overflow:'hidden'}}>
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',minWidth:800}}>
