@@ -1,198 +1,53 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useRouter, usePathname, useParams } from 'next/navigation'
-import Link from 'next/link'
+import { useParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-const DashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-const BillIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-const ClientIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-const PayIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-const ProdIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-const UserIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-const SettingIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
-const ShieldIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-const PlusIcon = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-const HomeIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function SlugLayout({ children }: { children: React.ReactNode }) {
   const { slug } = useParams() as { slug: string }
-  const [user, setUser] = useState<any>(null)
-  const [settings, setSettings] = useState<any>({})
-  const [open, setOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
-
-  const ALL_NAV = [
-    { label: 'Tableau de bord', href: `/${slug}/dashboard`, section: 'Général', icon: DashIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
-    { label: 'Factures', href: `/${slug}/dashboard/factures`, section: 'Gestion', icon: BillIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
-    { label: 'Clients', href: `/${slug}/dashboard/clients`, section: 'Gestion', icon: ClientIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
-    { label: 'Paiements', href: `/${slug}/dashboard/paiements`, section: 'Gestion', icon: PayIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
-    { label: 'Produits', href: `/${slug}/dashboard/produits`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
-    { label: 'Utilisateurs', href: `/${slug}/dashboard/utilisateurs`, section: 'Administration', icon: UserIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },
-    { label: 'Paramètres', href: `/${slug}/dashboard/parametres`, section: 'Administration', icon: SettingIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },
-    { label: 'Admin RS', href: `/${slug}/dashboard/admin-platform`, section: 'RS Comptabilité', icon: ShieldIcon, roles: ['owner'], platformAdminOnly: true },
-  ]
-  const SECTIONS = ['Général', 'Gestion', 'Administration', 'RS Comptabilité']
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setMounted(true)
-    const u = localStorage.getItem('user')
-    if (!u) return
-    const parsed = JSON.parse(u)
-    setUser(parsed)
-    setIsPlatformAdmin(parsed.is_platform_admin === true)
-    const savedCollapsed = localStorage.getItem('sidebar_collapsed')
-    if (savedCollapsed === 'true') setCollapsed(true)
-    fetchSettings(parsed.company_id)
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+    async function validate() {
+      const isLoginPage = pathname === `/${slug}`
+      
+      const { data: company } = await supabase.rpc('get_company_by_slug', { p_slug: slug })
+      if (!company) {
+        router.push('/')
+        return
+      }
 
-  async function fetchSettings(companyId?: string) {
-    if (!companyId) return
-    const { data } = await supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-    if (data) {
-      setSettings(data)
-      if (data.font_family) document.body.style.fontFamily = `${data.font_family}, sans-serif`
-      if (data.font_size_base) document.body.style.fontSize = `${data.font_size_base}px`
+      if (isLoginPage) {
+        setLoading(false)
+        return
+      }
+
+      const u = localStorage.getItem('user')
+      if (!u) {
+        router.push(`/${slug}`)
+        return
+      }
+
+      const parsed = JSON.parse(u)
+      
+      if (parsed.company_id !== company.id && !parsed.is_platform_admin) {
+        if (parsed.slug && parsed.slug !== slug) {
+          router.push(`/${parsed.slug}`)
+        } else {
+          localStorage.removeItem('user')
+          router.push(`/${slug}`)
+        }
+        return
+      }
+
+      setLoading(false)
     }
-  }
+    validate()
+  }, [slug, pathname])
 
-  function toggleCollapsed() {
-    const newVal = !collapsed
-    setCollapsed(newVal)
-    localStorage.setItem('sidebar_collapsed', String(newVal))
-  }
+  if (loading) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f5f4f1',color:'#a8a69e',fontFamily:'Outfit,sans-serif'}}>Chargement...</div>
 
-  function handleNavClick() {
-    setOpen(false)
-    if (!isMobile) {
-      setCollapsed(true)
-      localStorage.setItem('sidebar_collapsed', 'true')
-    }
-  }
-
-  function logout() {
-    localStorage.removeItem('user')
-    localStorage.removeItem('subscription')
-    supabase.auth.signOut()
-    router.push(`/${slug}`)
-  }
-
-  if (!mounted || !user) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f5f4f1'}}><div style={{color:'#a8a69e',fontSize:14}}>Chargement...</div></div>
-
-  const NAV = ALL_NAV.filter(n => {
-    if (n.platformAdminOnly && !isPlatformAdmin) return false
-    return n.roles.includes(user.role)
-  })
-  
-  const initials = user.full_name?.split(' ').map((w: string) => w[0]).slice(0, 2).join('') || 'U'
-  const currentLabel = NAV.find(n => n.href === pathname)?.label || 'Tableau de bord'
-  const sidebarWidth = collapsed ? 64 : 218
-  const companyName = settings.company_name || user.company_name || 'RSS'
-
-  const MOBILE_NAV = [
-    { label: 'Accueil', href: `/${slug}`, icon: HomeIcon },
-    { label: 'Factures', href: `/${slug}/dashboard/factures`, icon: BillIcon },
-    { label: 'Clients', href: `/${slug}/dashboard/clients`, icon: ClientIcon },
-    { label: 'Paiements', href: `/${slug}/dashboard/paiements`, icon: PayIcon },
-  ]
-
-  const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => (
-    <div style={{width:inDrawer?240:sidebarWidth,background:'#1a1916',display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',transition:'width .25s ease'}}>
-      <Link href={`/${slug}`} style={{padding:(collapsed && !inDrawer)?'18px 0':'18px 16px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:(collapsed && !inDrawer)?'center':'flex-start',gap:10,flexShrink:0,textDecoration:'none',cursor:'pointer'}}>
-        {settings.logo_url ? (
-          <img src={settings.logo_url} alt="Logo" style={{width:32,height:32,borderRadius:7,objectFit:'cover',flexShrink:0}}/>
-        ) : (
-          <div style={{width:32,height:32,background:settings.primary_color||'#2563EB',borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:14,flexShrink:0}}>{companyName.charAt(0)}</div>
-        )}
-        {(!collapsed || inDrawer) && (
-          <div>
-            <div style={{color:'#fff',fontWeight:600,fontSize:14,letterSpacing:'-.2px'}}>{companyName}</div>
-            <div style={{color:'rgba(255,255,255,0.3)',fontSize:10}}>RS Comptabilité</div>
-          </div>
-        )}
-      </Link>
-
-      <nav style={{flex:1,padding:(collapsed && !inDrawer)?'10px 6px':'10px 8px',overflowY:'auto',overflowX:'hidden'}}>
-        {SECTIONS.map(section => {
-          const items = NAV.filter(n => n.section === section)
-          if (items.length === 0) return null
-          return (
-            <div key={section}>
-              {(!collapsed || inDrawer) && <div style={{fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'.7px',padding:'8px 8px 4px'}}>{section}</div>}
-              {(collapsed && !inDrawer) && <div style={{height:12}}/>}
-              {items.map(item => {
-                const Icon = item.icon
-                const active = pathname === item.href
-                const showCollapsed = collapsed && !inDrawer
-                const isPlatformItem = item.platformAdminOnly
-                return (
-                  <Link key={item.href} href={item.href} onClick={handleNavClick}
-                    style={{display:'flex',alignItems:'center',gap:showCollapsed?0:10,padding:showCollapsed?'10px':'9px 10px',justifyContent:showCollapsed?'center':'flex-start',borderRadius:7,marginBottom:2,fontSize:13,fontWeight:active?500:400,color:active?'#fff':(isPlatformItem?'#a78bfa':'rgba(255,255,255,0.5)'),background:active?(isPlatformItem?'rgba(124,58,237,0.3)':'rgba(37,99,235,0.3)'):'transparent',textDecoration:'none',transition:'all .15s',position:'relative'}}>
-                    <span style={{opacity:active?1:0.6,flexShrink:0,display:'flex'}}><Icon/></span>
-                    {(!showCollapsed) && <span style={{whiteSpace:'nowrap'}}>{item.label}</span>}
-                  </Link>
-                )
-              })}
-            </div>
-          )
-        })}
-      </nav>
-
-      {!inDrawer && (
-        <button onClick={toggleCollapsed} style={{background:'rgba(255,255,255,0.05)',border:'none',cursor:'pointer',padding:8,color:'rgba(255,255,255,0.5)',borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontSize:11,fontFamily:'inherit'}}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{transform:collapsed?'rotate(180deg)':'none',transition:'.2s'}}><polyline points="15 18 9 12 15 6"/></svg>
-          {!collapsed && 'Réduire'}
-        </button>
-      )}
-
-      <div onClick={() => { router.push(`/${slug}/dashboard/profil`); setOpen(false) }}
-        style={{padding:(collapsed && !inDrawer)?'10px':12,borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:(collapsed && !inDrawer)?'center':'flex-start',gap:9,cursor:'pointer',flexShrink:0}}>
-        <div style={{width:32,height:32,borderRadius:'50%',background:isPlatformAdmin?'linear-gradient(135deg,#7c3aed,#5B3DF5)':'#2563EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0}}>{initials}</div>
-        {(!collapsed || inDrawer) && (
-          <div style={{minWidth:0}}>
-            <div style={{fontSize:12,fontWeight:500,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user.full_name}</div>
-            <div style={{fontSize:10,color:isPlatformAdmin?'#a78bfa':'rgba(255,255,255,0.35)'}}>{isPlatformAdmin?'👑 Super Admin RS':user.role}</div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-
-  return (
-    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:'#f5f4f1'}}>
-      {!isMobile && <div style={{flexShrink:0}}><Sidebar/></div>}
-      {isMobile && open && <div onClick={() => setOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:99}}/>}
-      {isMobile && (
-        <div style={{position:'fixed',top:0,left:0,height:'100%',zIndex:100,transform:open?'translateX(0)':'translateX(-100%)',transition:'transform .3s ease',width:240}}>
-          <Sidebar inDrawer/>
-        </div>
-      )}
-      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
-        <div style={{height:52,background:'#fff',borderBottom:'1px solid rgba(0,0,0,0.08)',display:'flex',alignItems:'center',padding:'0 16px',gap:10,flexShrink:0}}>
-          {isMobile && (
-            <button onClick={() => setOpen(!open)} style={{background:'none',border:'none',cursor:'pointer',padding:4}}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b6860" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            </button>
-          )}
-          <Link href={`/${slug}`} style={{fontSize:12,color:'#2563EB',textDecoration:'none',padding:'4px 10px',background:'rgba(37,99,235,0.08)',borderRadius:5,fontWeight:500}}>← Hub</Link>
-          <span style={{flex:1,fontWeight:600,fontSize:15,color:'#1a1916'}}>{currentLabel}</span>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {isPlatformAdmin && <span style={{fontSize:10,background:'linear-gradient(135deg,#7c3aed,#5B3DF5)',color:'#fff',padding:'3px 8px',borderRadius:20,fontWeight:600}}>👑 Admin RS</span>}
-            <span style={{fontSize:11,background:'rgba(37,99,235,0.1)',color:'#2563EB',padding:'2px 8px',borderRadius:20,fontWeight:500}}>{user.role}</span>
-            <button onClick={logout} style={{fontSize:12,color:'#dc2626',background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.15)',borderRadius:5,padding:'5px 10px',cursor:'pointer',fontFamily:'inherit'}}>Déconnexion</button>
-          </div>
-        </div>
-        <div style={{flex:1,overflowY:'auto',padding:isMobile?'16px 14px 84px':22}}>{children}</div>
-      </div>
-    </div>
-  )
+  return <>{children}</>
 }
