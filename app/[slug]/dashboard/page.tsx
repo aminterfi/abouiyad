@@ -148,7 +148,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const u = localStorage.getItem('user')
-    if (!u) { router.push('/'); return }
+    if (!u) return
     setUser(JSON.parse(u))
     fetchAll()
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -176,12 +176,14 @@ export default function Dashboard() {
       prevEnd = startDate
     }
 
+    const u = JSON.parse(localStorage.getItem('user')||'{}')
+    if (!u.company_id) return
     const [{ data: allBills },{ data: allPayments },{ data: allClients },{ data: recentBs },{ data: recentPs }] = await Promise.all([
-      supabase.from('bills').select('*, clients(full_name)').eq('is_archived', false),
-      supabase.from('payments').select('*'),
-      supabase.from('clients').select('*').eq('is_archived', false),
-      supabase.from('bills').select('*, clients(full_name)').eq('is_archived', false).order('created_at', { ascending: false }).limit(3),
-      supabase.from('payments').select('*, bills(invoice_number, clients(full_name))').order('created_at', { ascending: false }).limit(3)
+      supabase.from('bills').select('*, clients(full_name)').eq('company_id', u.company_id).eq('is_archived', false),
+      supabase.from('payments').select('*').eq('company_id', u.company_id),
+      supabase.from('clients').select('*').eq('company_id', u.company_id).eq('is_archived', false),
+      supabase.from('bills').select('*, clients(full_name)').eq('company_id', u.company_id).eq('is_archived', false).order('created_at', { ascending: false }).limit(3),
+      supabase.from('payments').select('*, bills(invoice_number, clients(full_name))').eq('company_id', u.company_id).order('created_at', { ascending: false }).limit(3)
     ])
 
     const bills = allBills || []
