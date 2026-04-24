@@ -815,7 +815,8 @@ export default function FacturesPage() {
                       <div style={{display:'flex',gap:5}}>
                         {b.status!=='payé' && <button style={{...btnSm,background:'rgba(22,163,74,0.08)',color:'#16a34a',border:'1px solid rgba(22,163,74,0.15)'}} onClick={()=>{setSelectedBill(b);setView('pay')}}>Régler</button>}
                         <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>generatePDF(b, settings)}>PDF</button>
-                        <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>deleteBill(b.id, b.invoice_number)}>×</button>
+                        <button style={{...btnSm,background:'rgba(107,104,96,0.08)',color:'#6b6860',border:'1px solid rgba(107,104,96,0.2)'}} onClick={()=>archive(b.id)} title="Archiver">📦</button>
+                        <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>deleteBill(b.id, b.invoice_number)} title="Supprimer">🗑</button>
                       </div>
                     </td>
                   </tr>

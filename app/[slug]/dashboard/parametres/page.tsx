@@ -26,6 +26,12 @@ const FONTS = [
   { name:'Raleway', preview:'Fin' },
 ]
 
+const TVA_OPTIONS = [
+  { value: 19, label: 'TVA 19% (standard Algérie)' },
+  { value: 9, label: 'TVA 9% (taux réduit)' },
+  { value: 0, label: 'Pas de TVA (0%)' },
+]
+
 export default function ParametresPage() {
   const [settings, setSettings] = useState<any>({})
   const [user, setUser] = useState<any>(null)
@@ -46,11 +52,11 @@ export default function ParametresPage() {
   async function fetch(companyId: string) {
     setLoading(true)
     const { data } = await supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
-const { data: comp } = await supabase.from('companies').select('slug').eq('id', companyId).maybeSingle()
-if (data) setSettings({ ...data, slug: comp?.slug || '' })
+    const { data: comp } = await supabase.from('companies').select('slug').eq('id', companyId).maybeSingle()
     
-    else {
-      // Créer settings si absent
+    if (data) {
+      setSettings({ ...data, slug: comp?.slug || '' })
+    } else {
       const { data: created } = await supabase.from('settings').insert({
         company_id: companyId,
         primary_color: '#2563EB',
@@ -60,7 +66,7 @@ if (data) setSettings({ ...data, slug: comp?.slug || '' })
         font_size_base: 14,
         font_size_pdf: 12,
       }).select().single()
-      if (created) setSettings(created)
+      if (created) setSettings({ ...created, slug: comp?.slug || '' })
     }
     setLoading(false)
   }
@@ -91,12 +97,25 @@ if (data) setSettings({ ...data, slug: comp?.slug || '' })
     } else {
       if (settings.font_family) document.body.style.fontFamily = `${settings.font_family}, sans-serif`
       if (settings.font_size_base) document.body.style.fontSize = `${settings.font_size_base}px`
-      // Rafraîchir
       fetch(user.company_id)
     }
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  async function updateSlug() {
+    if (!settings.slug || !user?.company_id) return
+    const { data } = await supabase.rpc('update_company_slug', { 
+      p_company_id: user.company_id, 
+      p_new_slug: settings.slug 
+    })
+    if (data?.success) {
+      alert('✓ Slug mis à jour')
+      setSettings({ ...settings, slug: data.slug })
+    } else {
+      alert('Erreur: ' + (data?.error || 'inconnue'))
+    }
   }
 
   async function uploadLogo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -153,22 +172,26 @@ if (data) setSettings({ ...data, slug: comp?.slug || '' })
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
                 <div style={{gridColumn:'1/-1'}}>
                   <label style={lbl}>Nom de l'entreprise *</label>
-                  <div style={{gridColumn:'1/-1'}}>
-  <label style={lbl}>Lien employés (slug URL)</label>
-  <div style={{display:'flex',gap:8,alignItems:'center'}}>
-    <span style={{fontSize:12,color:'#6b6860',whiteSpace:'nowrap'}}>rss.rscomptabilite.com/</span>
-    <input style={inp} value={settings.slug || ''} onChange={e=>setSettings({...settings,slug:e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'')})}/>
-    <span style={{fontSize:12,color:'#6b6860',whiteSpace:'nowrap'}}>/login</span>
-    <button onClick={async()=>{
-      const { data } = await supabase.rpc('update_company_slug', { p_company_id: user.company_id, p_new_slug: settings.slug })
-      if (data?.success) { alert('✓ Slug mis à jour'); setSettings({...settings, slug: data.slug}) }
-      else alert('Erreur: ' + (data?.error || 'inconnue'))
-    }} style={{padding:'9px 14px',fontSize:12,background:'#2563EB',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>Enregistrer slug</button>
-  </div>
-  {settings.slug && <div style={{fontSize:11,color:'#a8a69e',marginTop:6}}>🔗 Lien à partager : <code style={{background:'#f0eeea',padding:'2px 6px',borderRadius:3}}>rss.rscomptabilite.com/{settings.slug}/login</code></div>}
-</div>
                   <input style={inp} value={settings.company_name||''} onChange={e=>setSettings({...settings,company_name:e.target.value})}/>
                 </div>
+                
+                <div style={{gridColumn:'1/-1',background:'rgba(37,99,235,0.04)',padding:16,borderRadius:8,border:'1px solid rgba(37,99,235,0.15)'}}>
+                  <label style={lbl}>🔗 Lien de connexion (slug URL)</label>
+                  <div style={{display:'flex',gap:8,alignItems:'center',marginTop:4}}>
+                    <span style={{fontSize:12,color:'#6b6860',whiteSpace:'nowrap'}}>rss.rscomptabilite.com/</span>
+                    <input style={{...inp,flex:1}} value={settings.slug || ''} 
+                      onChange={e=>setSettings({...settings,slug:e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'')})}/>
+                    <button onClick={updateSlug} style={{padding:'9px 14px',fontSize:12,background:'#2563EB',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                      Valider le slug
+                    </button>
+                  </div>
+                  {settings.slug && (
+                    <div style={{fontSize:11,color:'#6b6860',marginTop:8}}>
+                      Lien à partager : <code style={{background:'#fff',padding:'2px 6px',borderRadius:3,fontWeight:600}}>rss.rscomptabilite.com/{settings.slug}</code>
+                    </div>
+                  )}
+                </div>
+                
                 <div><label style={lbl}>Email</label><input type="email" style={inp} value={settings.email||''} onChange={e=>setSettings({...settings,email:e.target.value})}/></div>
                 <div><label style={lbl}>Téléphone</label><input style={inp} value={settings.phone||''} onChange={e=>setSettings({...settings,phone:e.target.value})}/></div>
                 <div style={{gridColumn:'1/-1'}}><label style={lbl}>Adresse</label><input style={inp} value={settings.address||''} onChange={e=>setSettings({...settings,address:e.target.value})}/></div>
@@ -261,6 +284,23 @@ if (data) setSettings({ ...data, slug: comp?.slug || '' })
           {tab === 'facturation' && (
             <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:24}}>
               <div style={{fontSize:15,fontWeight:600,marginBottom:20}}>Facturation</div>
+              
+              <div style={{marginBottom:20}}>
+                <label style={lbl}>Taux de TVA</label>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginTop:6}}>
+                  {TVA_OPTIONS.map(opt => (
+                    <button key={opt.value} onClick={()=>setSettings({...settings,tva_rate:opt.value})}
+                      style={{padding:'16px 12px',borderRadius:10,border:`2px solid ${settings.tva_rate===opt.value?'#2563EB':'rgba(0,0,0,0.1)'}`,background:settings.tva_rate===opt.value?'rgba(37,99,235,0.06)':'#fff',cursor:'pointer',fontFamily:'inherit',textAlign:'center'}}>
+                      <div style={{fontSize:24,fontWeight:800,color:settings.tva_rate===opt.value?'#2563EB':'#1a1916'}}>{opt.value}%</div>
+                      <div style={{fontSize:11,color:'#6b6860',marginTop:4}}>{opt.label.replace(`TVA ${opt.value}% `, '').replace(`${opt.value}% `, '').replace('(','').replace(')','')}</div>
+                    </button>
+                  ))}
+                </div>
+                <div style={{marginTop:10,fontSize:11,color:'#a8a69e'}}>
+                  ℹ️ Ce taux sera appliqué automatiquement à toutes les nouvelles factures
+                </div>
+              </div>
+              
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
                 <div>
                   <label style={lbl}>Devise</label>
@@ -269,10 +309,6 @@ if (data) setSettings({ ...data, slug: comp?.slug || '' })
                     <option value="EUR">EUR — Euro</option>
                     <option value="USD">USD — Dollar</option>
                   </select>
-                </div>
-                <div>
-                  <label style={lbl}>TVA (%)</label>
-                  <input type="number" style={inp} value={settings.tva_rate||19} onChange={e=>setSettings({...settings,tva_rate:parseFloat(e.target.value)})}/>
                 </div>
                 <div style={{gridColumn:'1/-1'}}>
                   <label style={lbl}>Pied de page factures</label>
