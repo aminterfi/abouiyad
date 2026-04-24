@@ -26,13 +26,17 @@ export default function LoginPage() {
         await supabase.auth.signOut()
         throw new Error('Abonnement suspendu. Contactez RS Comptabilité.')
       }
+      // Récupérer le slug de la company
+      const { data: companyData } = await supabase.from('companies').select('slug').eq('id', owner.company_id).single()
+      const companySlug = companyData?.slug || ''
+      
       localStorage.setItem('user', JSON.stringify({
         id: auth.user!.id, email: auth.user!.email, full_name: owner.full_name,
         role: 'owner', company_id: owner.company_id, company_name: owner.company_name,
-        is_platform_admin: owner.is_platform_admin, type: 'owner',
+        is_platform_admin: owner.is_platform_admin, type: 'owner', slug: companySlug,
       }))
       if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
-      router.push('/dashboard')
+      router.push(`/${companySlug}`)
     } catch (err: any) {
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : err.message)
     }
