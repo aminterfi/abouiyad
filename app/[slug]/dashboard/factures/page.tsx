@@ -400,7 +400,337 @@ export default function FacturesPage() {
   const [form, setForm] = useState<any>({ client_id:'', note:'', date_due:'', items:[{ product_id:'', qty:1, price:0 }] })
   const [paiForm, setPaiForm] = useState({ amount:'', method:'Virement CPA', note:'' })
 
-  useEffect(() => { fetchAll() }, [])
+useEffect(() => { fetchAll() }, [])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
+
+  // Recharger les settings quand on ouvre le formulaire nouvelle facture
+  useEffect(() => {
+    if (view === 'new') {
+      const companyId = getCompanyId()
+      if (companyId) {
+        supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+          .then(({ data }) => { if (data) setSettings(data) })
+      }
+    }
+  }, [view])
 
   async function fetchAll() {
     setLoading(true)
