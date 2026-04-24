@@ -19,28 +19,44 @@ export default function LoginPage() {
         email: ownerEmail.trim(), password: ownerPassword,
       })
       if (authErr) throw authErr
+      console.log('✅ Auth OK:', auth.user?.id)
+      
       const { data: owner } = await supabase.rpc('get_owner_info', { p_user_id: auth.user!.id })
+      console.log('✅ Owner data:', owner)
       if (!owner) throw new Error('Aucune entreprise liée à ce compte')
+      
       const { data: sub } = await supabase.rpc('get_company_subscription', { p_company_id: owner.company_id })
       if (!owner.is_platform_admin && (sub?.status === 'cancelled' || sub?.status === 'expired')) {
         await supabase.auth.signOut()
         throw new Error('Abonnement suspendu. Contactez RS Comptabilité.')
       }
-      // Récupérer le slug de la company
+      
       const { data: companyData } = await supabase.from('companies').select('slug').eq('id', owner.company_id).single()
       const companySlug = companyData?.slug || ''
+      console.log('✅ Slug:', companySlug)
       
-      localStorage.setItem('user', JSON.stringify({
+      if (!companySlug) {
+        throw new Error('Cette entreprise n\'a pas de slug. Contactez l\'administrateur.')
+      }
+      
+      const userData = {
         id: auth.user!.id, email: auth.user!.email, full_name: owner.full_name,
         role: 'owner', company_id: owner.company_id, company_name: owner.company_name,
         is_platform_admin: owner.is_platform_admin, type: 'owner', slug: companySlug,
-      }))
+      }
+      
+      localStorage.setItem('user', JSON.stringify(userData))
       if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
-      router.push(`/${companySlug}`)
+      
+      console.log('✅ User stored, redirecting to:', `/${companySlug}/dashboard`)
+      
+      // Utiliser window.location au lieu de router.push pour forcer un reload complet
+      window.location.href = `/${companySlug}/dashboard`
     } catch (err: any) {
+      console.error('❌ Login error:', err)
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : err.message)
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -51,15 +67,12 @@ export default function LoginPage() {
           <div style={{fontSize:30,fontWeight:800,letterSpacing:'-.5px'}}>RSS</div>
           <div style={{fontSize:13,color:'#6b6860',marginTop:4}}>Système de gestion comptable</div>
         </div>
-
         <div style={{background:'#fff',borderRadius:16,padding:30,boxShadow:'0 10px 40px rgba(0,0,0,0.08)',border:'1px solid rgba(0,0,0,0.06)'}}>
           <div style={{marginBottom:24}}>
             <div style={{fontSize:20,fontWeight:700,marginBottom:4}}>Connexion entreprise</div>
             <div style={{fontSize:12,color:'#a8a69e'}}>Connectez-vous avec votre email professionnel</div>
           </div>
-
           {error && <div style={{background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.2)',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#dc2626',marginBottom:16}}>{error}</div>}
-
           <form onSubmit={loginOwner}>
             <label style={{fontSize:12,color:'#6b6860',marginBottom:6,display:'block'}}>Email professionnel</label>
             <input type="email" required autoFocus value={ownerEmail} onChange={e=>setOwnerEmail(e.target.value)} placeholder="contact@votre-entreprise.com"
@@ -75,12 +88,10 @@ export default function LoginPage() {
               Pas encore de compte ? <Link href="/signup" style={{color:'#2563EB',fontWeight:600,textDecoration:'none'}}>Créer une entreprise</Link>
             </div>
           </form>
-
           <div style={{marginTop:20,paddingTop:20,borderTop:'1px solid rgba(0,0,0,0.06)',fontSize:11,color:'#a8a69e',textAlign:'center'}}>
             👤 Employé ? Demandez votre lien d'accès à votre administrateur
           </div>
         </div>
-
         <div style={{textAlign:'center',marginTop:20,fontSize:11,color:'#a8a69e'}}>
           <strong style={{color:'#6b6860'}}>RSS</strong> · Développé par <strong style={{color:'#6b6860'}}>RS Comptabilité</strong><br/>
           <span style={{fontSize:10}}>Tous droits réservés © 2026</span>
