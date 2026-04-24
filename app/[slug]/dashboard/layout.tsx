@@ -15,7 +15,7 @@ export default function SlugLayout({ children }: { children: React.ReactNode }) 
       
       const { data: company } = await supabase.rpc('get_company_by_slug', { p_slug: slug })
       if (!company) {
-        router.push('/')
+        router.push(`/${slug}`)
         return
       }
 

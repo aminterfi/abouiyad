@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 
 function dzd(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:0})+' DZD' }
 
@@ -18,6 +18,7 @@ export default function AdminPlatformPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('tous')
   const router = useRouter()
+  const { slug } = useParams() as { slug: string }
 
   // Modals
   const [showCreateCompany, setShowCreateCompany] = useState(false)
@@ -45,7 +46,7 @@ export default function AdminPlatformPage() {
 
   async function checkAccess() {
     const u = localStorage.getItem('user')
-    if (!u) { router.push('/'); return }
+    if (!u) { router.push(`/${slug}`); return }
     const parsed = JSON.parse(u)
     
     // Utiliser la valeur déjà stockée dans localStorage
