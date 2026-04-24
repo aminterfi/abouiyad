@@ -11,19 +11,24 @@ export default function SlugLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     async function validate() {
-      const isLoginPage = pathname === `/${slug}`
-      
+      // 1. Vérifier que l'entreprise existe
       const { data: company } = await supabase.rpc('get_company_by_slug', { p_slug: slug })
       if (!company) {
         router.push('/')
         return
       }
 
+      // 2. Page login du slug : accessible sans user
+      const isLoginPage = pathname === `/${slug}`
       if (isLoginPage) {
         setLoading(false)
         return
       }
 
+      // 3. Attendre un peu pour laisser le temps au localStorage
+      await new Promise(r => setTimeout(r, 150))
+
+      // 4. Vérifier user
       const u = localStorage.getItem('user')
       if (!u) {
         router.push(`/${slug}`)
@@ -31,10 +36,10 @@ export default function SlugLayout({ children }: { children: React.ReactNode }) 
       }
 
       const parsed = JSON.parse(u)
-      
-      // Si user d'une autre entreprise → rediriger vers SON slug
+
+      // 5. Vérifier que le user appartient à cette entreprise
       if (parsed.company_id !== company.id && !parsed.is_platform_admin) {
-        if (parsed.slug) {
+        if (parsed.slug && parsed.slug !== slug) {
           router.push(`/${parsed.slug}/dashboard`)
         } else {
           localStorage.removeItem('user')
