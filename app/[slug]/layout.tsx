@@ -32,10 +32,14 @@ export default function SlugLayout({ children }: { children: React.ReactNode }) 
 
       const parsed = JSON.parse(u)
       
+      // Si user d'une autre entreprise → rediriger vers SON slug
       if (parsed.company_id !== company.id && !parsed.is_platform_admin) {
-        alert('Accès non autorisé à cette entreprise')
-        localStorage.removeItem('user')
-        router.push(`/${slug}`)
+        if (parsed.slug) {
+          router.push(`/${parsed.slug}/dashboard`)
+        } else {
+          localStorage.removeItem('user')
+          router.push(`/${slug}`)
+        }
         return
       }
 
