@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter, useParams } from 'next/navigation'
 
 function dzd(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:2})+' DZD' }
 function dzdShort(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:0})+' DZD' }
@@ -429,6 +430,8 @@ body{background:#f5f5f5;padding:20px}
 }
 
 export default function FacturesPage() {
+  const router = useRouter()
+  const { slug } = useParams() as { slug: string }
   const [bills, setBills] = useState<any[]>([])
   const [clients, setClients] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -770,7 +773,7 @@ export default function FacturesPage() {
         </div>
         <div style={{display:'flex',gap:8}}>
           <button style={btnG} onClick={exportExcel}>📊 Export</button>
-          <button style={btnP} onClick={()=>setView('new')}>+ Nouvelle facture</button>
+          <button style={btnP} onClick={()=>router.push(`/${slug}/dashboard/factures/nouvelle`)}>+ Nouvelle facture</button>
         </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:16}}>
