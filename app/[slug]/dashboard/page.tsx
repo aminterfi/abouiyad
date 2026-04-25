@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useRealtime } from '@/lib/useRealtime'
 
@@ -34,18 +34,10 @@ function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[]
           <div style={{fontSize:15,fontWeight:700,color:'#1a1916'}}>Chiffre d'affaires</div>
           <div style={{fontSize:11,color:'#a8a69e',marginTop:2}}>12 derniers mois</div>
         </div>
-        <div style={{display:'flex',gap:10,fontSize:10,color:'#6b6860'}}>
-          <div style={{display:'flex',alignItems:'center',gap:5}}>
-            <div style={{width:8,height:8,borderRadius:2,background:'#5B3DF5'}}/>Encaissé
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:5}}>
-            <div style={{width:8,height:8,borderRadius:2,background:'#8B7CF6',opacity:0.5}}/>Projection
-          </div>
-        </div>
       </div>
 
       {hovered !== null && (
-        <div style={{background:'#1a1916',color:'#fff',padding:'8px 12px',borderRadius:8,fontSize:12,marginBottom:10,display:'inline-block',fontWeight:500,boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
+        <div style={{background:'#1a1916',color:'#fff',padding:'8px 12px',borderRadius:8,fontSize:12,marginBottom:10,display:'inline-block',fontWeight:500}}>
           <span style={{opacity:0.7}}>{labels[hovered]} · </span>
           <strong style={{color:'#a78bfa'}}>+ {dzdS(monthly[hovered])}</strong>
         </div>
@@ -81,13 +73,7 @@ function RevenueChart({ monthly, labels }: { monthly: number[], labels: string[]
                     cursor:'pointer',
                     transform:isHovered?'scaleY(1.02)':'scaleY(1)',
                     transformOrigin:'bottom',
-                    boxShadow:isHovered?'0 4px 12px rgba(91,61,245,0.3)':'none',
-                    position:'relative'
-                  }}>
-                    {isLast && (
-                      <div style={{position:'absolute',inset:0,backgroundImage:'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)',borderRadius:'6px 6px 0 0'}}/>
-                    )}
-                  </div>
+                  }}/>
                 </div>
               )
             })}
@@ -129,6 +115,7 @@ function KpiCard({ label, value, sub, color, icon, trend, isMobile }: any) {
 }
 
 export default function Dashboard() {
+  const { slug } = useParams() as { slug: string }
   const [user, setUser] = useState<any>(null)
   const [data, setData] = useState<any>({
     caPeriod: 0, caPrev: 0, clientsTotal: 0, clientsNew: 0,
@@ -247,10 +234,7 @@ export default function Dashboard() {
 
   if (loading) return (
     <div style={{padding:16}}>
-      <style>{`
-        @keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
-        @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
-      `}</style>
+      <style>{`@keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }`}</style>
       {[1,2,3].map(i => (
         <div key={i} style={{height:80,borderRadius:12,marginBottom:12,border:'1px solid rgba(0,0,0,0.05)',background:'linear-gradient(90deg, #f0eeea 0%, #f8f7f5 50%, #f0eeea 100%)',backgroundSize:'200% 100%',animation:'shimmer 1.5s infinite'}}/>
       ))}
@@ -294,54 +278,26 @@ export default function Dashboard() {
       <div style={{background:'#f0eeea',borderRadius:12,padding:4,display:'flex',marginBottom:20}}>
         {[{v:'semaine',l:'Semaine'},{v:'mois',l:'Mois'},{v:'annee',l:'Année'}].map(p=>(
           <button key={p.v} onClick={()=>setPeriod(p.v)}
-            style={{
-              flex:1,padding:'10px',borderRadius:9,fontSize:13,cursor:'pointer',border:'none',
-              fontFamily:'inherit',fontWeight:period===p.v?600:500,
-              background:period===p.v?'#2563EB':'transparent',
-              color:period===p.v?'#fff':'#6b6860',
-              transition:'all .2s cubic-bezier(.4,0,.2,1)',
-              boxShadow:period===p.v?'0 2px 8px rgba(37,99,235,0.25)':'none'
-            }}>{p.l}</button>
+            style={{flex:1,padding:'10px',borderRadius:9,fontSize:13,cursor:'pointer',border:'none',fontFamily:'inherit',fontWeight:period===p.v?600:500,background:period===p.v?'#2563EB':'transparent',color:period===p.v?'#fff':'#6b6860',transition:'all .2s'}}>{p.l}</button>
         ))}
       </div>
 
       <div className="hide-scrollbar" style={kpiScrollStyle}>
-        <KpiCard isMobile={isMobile}
-          label={`CA ${period}`}
-          value={dzdS(data.caPeriod)}
-          color="#16a34a"
-          trend={caEvolution}
-          sub="vs préc."
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>}
-        />
-        <KpiCard isMobile={isMobile}
-          label="Clients"
-          value={data.clientsTotal}
-          color="#2563EB"
-          sub={data.clientsNew > 0 ? `+${data.clientsNew} nouveaux` : 'Total actifs'}
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>}
-        />
-        <KpiCard isMobile={isMobile}
-          label="Impayés"
-          value={dzdS(data.impaye)}
-          color="#d97706"
-          sub={`${data.factPending} factures`}
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
-        />
-        <KpiCard isMobile={isMobile}
-          label="Recouvrement"
-          value={`${data.taux}%`}
-          color="#7c3aed"
-          sub={data.taux>70?'Excellent':data.taux>40?'Correct':'À améliorer'}
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>}
-        />
+        <KpiCard isMobile={isMobile} label={`CA ${period}`} value={dzdS(data.caPeriod)} color="#16a34a" trend={caEvolution} sub="vs préc."
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>}/>
+        <KpiCard isMobile={isMobile} label="Clients" value={data.clientsTotal} color="#2563EB" sub={data.clientsNew > 0 ? `+${data.clientsNew} nouveaux` : 'Total actifs'}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>}/>
+        <KpiCard isMobile={isMobile} label="Impayés" value={dzdS(data.impaye)} color="#d97706" sub={`${data.factPending} factures`}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}/>
+        <KpiCard isMobile={isMobile} label="Recouvrement" value={`${data.taux}%`} color="#7c3aed" sub={data.taux>70?'Excellent':data.taux>40?'Correct':'À améliorer'}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>}/>
       </div>
 
       <div style={{marginBottom:20}}>
         <RevenueChart monthly={monthlyRev} labels={monthlyLabels} />
       </div>
 
-      <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,padding:20,marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
+      <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,padding:20,marginBottom:20}}>
         <div style={{fontSize:15,fontWeight:700,marginBottom:4,color:'#1a1916'}}>État des factures</div>
         <div style={{fontSize:11,color:'#a8a69e',marginBottom:16}}>{totalBills} factures au total</div>
         {[
@@ -355,7 +311,7 @@ export default function Dashboard() {
               <span><span style={{color:item.color,fontWeight:700}}>{item.pct}%</span> <span style={{color:'#a8a69e',fontSize:11}}>· {item.count}</span></span>
             </div>
             <div style={{background:'#f0eeea',borderRadius:4,height:8,overflow:'hidden'}}>
-              <div style={{height:'100%',width:`${item.pct}%`,background:item.color,borderRadius:4,transition:'width .8s cubic-bezier(.4,0,.2,1)'}}/>
+              <div style={{height:'100%',width:`${item.pct}%`,background:item.color,borderRadius:4,transition:'width .8s'}}/>
             </div>
           </div>
         ))}
@@ -365,21 +321,13 @@ export default function Dashboard() {
         <div style={{fontSize:14,fontWeight:700,marginBottom:12,color:'#1a1916',paddingLeft:4}}>Actions rapides</div>
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10}}>
           {[
-            { label:'Nouvelle facture', href:'/dashboard/factures', color:'#2563EB', icon:'📄' },
-            { label:'Nouveau client', href:'/dashboard/clients', color:'#16a34a', icon:'👥' },
-            { label:'Encaisser', href:'/dashboard/factures', color:'#d97706', icon:'💰' },
-            { label:'Produits', href:'/dashboard/produits', color:'#7c3aed', icon:'📦' },
+            { label:'Nouvelle facture', href:`/${slug}/dashboard/factures/nouvelle`, color:'#2563EB', icon:'📄' },
+            { label:'Nouveau client', href:`/${slug}/dashboard/clients`, color:'#16a34a', icon:'👥' },
+            { label:'Encaisser', href:`/${slug}/dashboard/factures`, color:'#d97706', icon:'💰' },
+            { label:'Produits', href:`/${slug}/dashboard/produits`, color:'#7c3aed', icon:'📦' },
           ].map(item => (
             <Link key={item.label} href={item.href}
-              style={{
-                display:'flex',flexDirection:isMobile?'row':'column',alignItems:'center',gap:isMobile?12:8,
-                padding:isMobile?'16px':'18px 12px',
-                background:'#fff',
-                border:'1px solid rgba(0,0,0,0.05)',
-                borderRadius:12,textDecoration:'none',
-                boxShadow:'0 1px 3px rgba(0,0,0,0.03)',
-                transition:'transform .15s'
-              }}>
+              style={{display:'flex',flexDirection:isMobile?'row':'column',alignItems:'center',gap:isMobile?12:8,padding:isMobile?'16px':'18px 12px',background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:12,textDecoration:'none',boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
               <div style={{width:40,height:40,borderRadius:10,background:`${item.color}10`,color:item.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>{item.icon}</div>
               <div style={{fontSize:13,fontWeight:600,color:'#1a1916',textAlign:isMobile?'left':'center'}}>{item.label}</div>
             </Link>
@@ -388,19 +336,18 @@ export default function Dashboard() {
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:16,marginBottom:20}}>
-        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
+        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden'}}>
           <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{fontSize:14,fontWeight:700}}>Dernières factures</div>
-            <Link href="/dashboard/factures" style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tout voir →</Link>
+            <Link href={`/${slug}/dashboard/factures`} style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tout voir →</Link>
           </div>
           <div>
             {recentBills.length === 0 ? (
               <div style={{textAlign:'center',padding:30,color:'#a8a69e',fontSize:13}}>
-                <div style={{fontSize:30,marginBottom:8}}>📄</div>
-                Aucune facture
+                <div style={{fontSize:30,marginBottom:8}}>📄</div>Aucune facture
               </div>
             ) : recentBills.map((b,i) => (
-              <Link key={b.id} href="/dashboard/factures"
+              <Link key={b.id} href={`/${slug}/dashboard/factures`}
                 style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderBottom:i<recentBills.length-1?'1px solid rgba(0,0,0,0.04)':'none',textDecoration:'none',color:'inherit'}}>
                 <div style={{width:36,height:36,borderRadius:10,background:'rgba(37,99,235,0.08)',color:'#2563EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
                   {b.clients?.full_name?.split(' ').map((w:string)=>w[0]).slice(0,2).join('')}
@@ -418,16 +365,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
+        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden'}}>
           <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{fontSize:14,fontWeight:700}}>Derniers paiements</div>
-            <Link href="/dashboard/paiements" style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tout voir →</Link>
+            <Link href={`/${slug}/dashboard/paiements`} style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tout voir →</Link>
           </div>
           <div>
             {recentPayments.length === 0 ? (
               <div style={{textAlign:'center',padding:30,color:'#a8a69e',fontSize:13}}>
-                <div style={{fontSize:30,marginBottom:8}}>💰</div>
-                Aucun paiement
+                <div style={{fontSize:30,marginBottom:8}}>💰</div>Aucun paiement
               </div>
             ) : recentPayments.map((p,i) => (
               <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderBottom:i<recentPayments.length-1?'1px solid rgba(0,0,0,0.04)':'none'}}>
@@ -444,10 +390,10 @@ export default function Dashboard() {
       </div>
 
       {topClients.length > 0 && (
-        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden',marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,0.03)'}}>
+        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden',marginBottom:20}}>
           <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{fontSize:14,fontWeight:700}}>🏆 Meilleurs clients</div>
-            <Link href="/dashboard/clients" style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tous →</Link>
+            <Link href={`/${slug}/dashboard/clients`} style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tous →</Link>
           </div>
           <div style={{padding:18}}>
             {topClients.map((c:any,i) => {
@@ -463,7 +409,7 @@ export default function Dashboard() {
                     <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:12,fontWeight:700,color:'#5B3DF5',flexShrink:0}}>{dzdS(c.total)}</span>
                   </div>
                   <div style={{background:'#f0eeea',borderRadius:3,height:5,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:`${pct}%`,background:'linear-gradient(90deg,#5B3DF5,#8B7CF6)',borderRadius:3,transition:'width .8s cubic-bezier(.4,0,.2,1)'}}/>
+                    <div style={{height:'100%',width:`${pct}%`,background:'linear-gradient(90deg,#5B3DF5,#8B7CF6)',borderRadius:3,transition:'width .8s'}}/>
                   </div>
                 </div>
               )
@@ -473,7 +419,7 @@ export default function Dashboard() {
       )}
 
       <div style={{textAlign:'center',marginTop:24,marginBottom:8,fontSize:10,color:'#c8c6be'}}>
-        ABOU IYAD · Développé par RS Comptabilité
+        Développé par RS Comptabilité
       </div>
     </div>
   )
