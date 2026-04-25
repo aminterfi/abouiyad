@@ -203,18 +203,23 @@ async function generatePDF(bill: any, settings: any) {
   ])
   const s = freshSettings || settings || {}
   const allItems = items || []
-  const allPays = pays || []
 
   const win = window.open('', '_blank', 'width=900,height=1000')
   if (!win) { alert('Autorisez les popups'); return }
 
-  const totalHT = allItems.reduce((sum: number, i: any) => sum + (i.quantity * i.unit_price), 0)
+  const subtotal = allItems.reduce((sum: number, i: any) => sum + Math.max(0, (i.quantity * i.unit_price) - (i.discount || 0)), 0)
+  const discountEnabled = bill.discount_enabled === true
+  const discountValue = Number(bill.discount_value) || 0
+  const afterDiscount = discountEnabled && discountValue > 0 ? Math.max(0, subtotal - discountValue) : subtotal
+  const tvaEnabled = bill.tva_enabled !== false
   const tvaRate = s.tva_rate !== undefined && s.tva_rate !== null ? Number(s.tva_rate) : 19
-  const tva = totalHT * tvaRate / 100
+  const tva = tvaEnabled ? Math.round(afterDiscount * tvaRate / 100 * 100) / 100 : 0
   const color = s.primary_color || '#2563EB'
   const company = s.company_name || 'RSS'
-  const due = bill.due_date ? new Date(bill.due_date).toLocaleDateString('fr-DZ') : '—'
-  const solde = bill.total_amount - bill.paid_amount
+  const due = bill.due_date ? new Date(bill.due_date).toLocaleDateString('fr-DZ', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
+  const showNotes = bill.show_notes_pdf !== false && bill.notes
+  const showTerms = bill.show_terms_pdf !== false && bill.terms
+  const fmt = (v: number) => v.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })
 
   win.document.write(`<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"><title>${bill.invoice_number}</title>
@@ -222,70 +227,97 @@ async function generatePDF(bill: any, settings: any) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
+@page { size: A4; margin: 0; }
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',-apple-system,sans-serif}
-body{background:#f1f5f9;padding:30px 20px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.page{background:#fff;max-width:210mm;margin:0 auto;padding:0;box-shadow:0 20px 60px rgba(0,0,0,0.08);border-radius:2px;position:relative;overflow:hidden}
-.accent-bar{height:8px;background:linear-gradient(90deg, ${color}, ${color}cc, ${color});width:100%}
-.inner{padding:50px 55px}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:45px}
+body{background:#f1f5f9;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page-wrap{padding:30px 20px;min-height:100vh}
+.page{background:#fff;max-width:210mm;min-height:297mm;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,0.08);border-radius:2px;position:relative;display:flex;flex-direction:column}
+.accent-bar{height:8px;background:linear-gradient(90deg,${color},${color}cc,${color});flex-shrink:0}
+.inner{padding:45px 50px 110px 50px;flex:1}
+
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:38px}
 .brand{display:flex;align-items:center;gap:16px}
-.brand-logo{width:64px;height:64px;border-radius:12px;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:26px;letter-spacing:-1px;box-shadow:0 8px 20px ${color}40}
-.brand-logo img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px}
-.brand-info .name{font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-.5px;margin-bottom:3px}
-.brand-info .tag{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:600}
-.brand-info .meta{font-size:11px;color:#64748b;margin-top:8px;line-height:1.6}
+.brand-logo{width:60px;height:60px;border-radius:12px;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:24px;letter-spacing:-1px;box-shadow:0 8px 20px ${color}40;overflow:hidden}
+.brand-logo img{max-width:100%;max-height:100%;object-fit:contain}
+.brand-info .name{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.5px;margin-bottom:3px}
+.brand-info .tag{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:600}
+.brand-info .meta{font-size:10.5px;color:#64748b;margin-top:6px;line-height:1.6}
+
 .doc-label{text-align:right}
-.doc-label .type{font-size:11px;color:${color};text-transform:uppercase;letter-spacing:3px;font-weight:700;margin-bottom:8px}
-.doc-label h1{font-size:42px;font-weight:800;color:#0f172a;letter-spacing:-1.5px;line-height:1;margin-bottom:12px}
-.doc-label .num{display:inline-block;background:${color}12;color:${color};padding:8px 16px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px}
-.dates-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;margin-bottom:32px;padding:18px 22px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0}
+.doc-label .type{font-size:10px;color:${color};text-transform:uppercase;letter-spacing:3px;font-weight:700;margin-bottom:6px}
+.doc-label h1{font-size:38px;font-weight:800;color:#0f172a;letter-spacing:-1.5px;line-height:1;margin-bottom:10px}
+.doc-label .num{display:inline-block;background:${color}12;color:${color};padding:7px 14px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px}
+
+.dates-grid{display:grid;grid-template-columns:repeat(${bill.order_number ? 3 : 2}, 1fr);gap:14px;margin-bottom:28px;padding:16px 20px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0}
 .dates-grid .label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:4px}
 .dates-grid .value{font-size:13px;color:#0f172a;font-weight:600}
-.parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:35px}
-.party{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;position:relative;overflow:hidden}
+
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:28px}
+.party{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;position:relative;overflow:hidden}
 .party::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:${color}}
-.party .label{font-size:10px;color:${color};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:10px}
-.party .name{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:8px}
-.party .contact{font-size:12px;color:#475569;line-height:1.7}
-table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:30px}
-thead th{background:#0f172a;color:#fff;padding:14px 18px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px}
+.party .label{font-size:10px;color:${color};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px}
+.party .name{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:6px}
+.party .contact{font-size:11px;color:#475569;line-height:1.7}
+
+table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:24px}
+thead th{background:#0f172a;color:#fff;padding:12px 16px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px}
 thead th.right{text-align:right}
 tbody tr:nth-child(even){background:#f8fafc}
-tbody td{padding:14px 18px;font-size:13px;color:#0f172a;border-bottom:1px solid #f1f5f9}
+tbody td{padding:13px 16px;font-size:12.5px;color:#0f172a;border-bottom:1px solid #f1f5f9}
 tbody td.right{text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600}
 tbody td .item-name{font-weight:600;color:#0f172a}
+tbody td .item-discount{font-size:10px;color:#16a34a;margin-top:2px;font-weight:500}
 tbody tr:last-child td{border-bottom:none}
-.summary{display:grid;grid-template-columns:1fr 360px;gap:25px;margin-top:30px;align-items:start}
+
+.summary{display:grid;grid-template-columns:1fr 320px;gap:22px;margin-top:24px;align-items:start}
+
+.notes-block{background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:14px 18px;margin-bottom:12px}
+.notes-block .label{font-size:9px;color:#a16207;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:6px}
+.notes-block .content{font-size:11.5px;color:#78350f;line-height:1.6;white-space:pre-wrap}
+
+.terms-block{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px}
+.terms-block .label{font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:6px}
+.terms-block .content{font-size:10.5px;color:#475569;line-height:1.6;white-space:pre-wrap}
+
 .totals{background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}
-.totals .row{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;font-size:13px;color:#475569;border-bottom:1px solid #e2e8f0}
+.totals .row{display:flex;justify-content:space-between;align-items:center;padding:11px 20px;font-size:12.5px;color:#475569;border-bottom:1px solid #e2e8f0}
 .totals .row .amount{font-family:'JetBrains Mono',monospace;font-weight:600;color:#0f172a}
-.totals .row.total{background:${color};color:#fff;padding:16px 22px;border-bottom:none}
-.totals .row.total .label{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:1.2px}
-.totals .row.total .amount{color:#fff;font-size:20px;font-weight:800}
-.totals .row.paid{background:#f0fdf4;color:#15803d}
-.totals .row.paid .amount{color:#15803d}
-.totals .row.balance.pending{background:#fff7ed;color:#c2410c;padding:16px 22px}
-.totals .row.balance.pending .amount{color:#c2410c;font-weight:800;font-size:16px}
-.totals .row.balance.done{background:#f0fdf4;color:#15803d;padding:16px 22px}
-.totals .row.balance.done .amount{color:#15803d;font-weight:800;font-size:16px}
-.footer{margin-top:45px;padding-top:25px;border-top:2px solid #e2e8f0;text-align:center}
-.footer .msg{font-size:12px;color:#475569;font-style:italic;margin-bottom:12px;line-height:1.6}
-.footer .brand-credit{font-size:10px;color:#94a3b8;margin-top:12px}
-.footer .brand-credit strong{color:${color};font-weight:700}
-.stamp{position:absolute;bottom:180px;right:65px;border:3px solid ${color};color:${color};padding:12px 20px;font-size:14px;font-weight:800;letter-spacing:2px;transform:rotate(-12deg);opacity:.3;border-radius:6px;text-transform:uppercase}
-@media print {body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.toolbar{display:none !important}}
+.totals .row.discount{color:#16a34a}
+.totals .row.discount .amount{color:#16a34a}
+.totals .row.exonere{background:#fef2f2;color:#991b1b}
+.totals .row.exonere .amount{color:#991b1b;font-style:italic}
+.totals .row.total{background:${color};color:#fff;padding:16px 20px;border-bottom:none}
+.totals .row.total .label{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1.2px}
+.totals .row.total .amount{color:#fff;font-size:19px;font-weight:800}
+
+.footer-fixed{position:absolute;bottom:0;left:0;right:0;padding:18px 50px;border-top:2px solid ${color};background:#fff;text-align:center}
+.footer-fixed .msg{font-size:10.5px;color:#475569;font-style:italic;margin-bottom:8px;line-height:1.5}
+.footer-fixed .credit{font-size:9.5px;color:#94a3b8;line-height:1.5}
+.footer-fixed .credit strong{color:${color};font-weight:700}
+
+@media print {
+  body{background:#fff}
+  .page-wrap{padding:0}
+  .page{box-shadow:none;border-radius:0;min-height:auto}
+  .toolbar{display:none !important}
+}
+
 .toolbar{position:fixed;top:20px;right:20px;display:flex;gap:10px;z-index:100;background:#fff;padding:10px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12)}
-.toolbar button{padding:10px 20px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:600}
+.toolbar button{padding:10px 20px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Inter',sans-serif}
 .btn-print{background:${color};color:#fff}
 .btn-close{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
 </style></head><body>
+
 <div class="toolbar">
   <button class="btn-print" onclick="window.print()">🖨️ Imprimer / PDF</button>
   <button class="btn-close" onclick="window.close()">✕ Fermer</button>
 </div>
+
+<div class="page-wrap">
 <div class="page">
   <div class="accent-bar"></div>
   <div class="inner">
+
     <div class="header">
       <div class="brand">
         <div class="brand-logo">${s.logo_url ? `<img src="${s.logo_url}" alt="${company}"/>` : company.charAt(0)}</div>
@@ -293,9 +325,8 @@ tbody tr:last-child td{border-bottom:none}
           <div class="name">${company}</div>
           <div class="tag">${s.tax_number ? 'NIF/RC ' + s.tax_number : 'Entreprise'}</div>
           <div class="meta">
-            ${s.address ? `<div>📍 ${s.address}</div>` : ''}
-            ${s.phone ? `<div>📞 ${s.phone}</div>` : ''}
-            ${s.email ? `<div>✉ ${s.email}</div>` : ''}
+            ${s.address ? `📍 ${s.address}<br>` : ''}
+            ${s.phone ? `📞 ${s.phone}` : ''}${s.phone && s.email ? ' · ' : ''}${s.email ? `✉ ${s.email}` : ''}
           </div>
         </div>
       </div>
@@ -305,16 +336,27 @@ tbody tr:last-child td{border-bottom:none}
         <div class="num">${bill.invoice_number}</div>
       </div>
     </div>
+
     <div class="dates-grid">
-      <div><div class="label">Date d'émission</div><div class="value">${new Date(bill.created_at).toLocaleDateString('fr-DZ', { day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
-      <div><div class="label">Date d'échéance</div><div class="value">${due}</div></div>
-      <div><div class="label">Statut</div><div class="value" style="color:${bill.status==='payé'?'#16a34a':bill.status==='partiel'?'#d97706':'#dc2626'};font-weight:700;text-transform:uppercase">● ${bill.status}</div></div>
+      <div>
+        <div class="label">Date d'émission</div>
+        <div class="value">${new Date(bill.created_at).toLocaleDateString('fr-DZ', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+      </div>
+      <div>
+        <div class="label">Date d'échéance</div>
+        <div class="value">${due}</div>
+      </div>
+      ${bill.order_number ? `<div>
+        <div class="label">N° Commande</div>
+        <div class="value" style="font-family:'JetBrains Mono',monospace">${bill.order_number}</div>
+      </div>` : ''}
     </div>
+
     <div class="parties">
       <div class="party">
         <div class="label">Émis par</div>
         <div class="name">${company}</div>
-        <div class="contact">${s.address || ''}<br>${s.phone ? `Tél : ${s.phone}<br>` : ''}${s.email ? `Email : ${s.email}` : ''}</div>
+        <div class="contact">${s.address || ''}${s.address ? '<br>' : ''}${s.phone ? `Tél : ${s.phone}<br>` : ''}${s.email ? `Email : ${s.email}` : ''}</div>
       </div>
       <div class="party">
         <div class="label">Facturé à</div>
@@ -322,38 +364,96 @@ tbody tr:last-child td{border-bottom:none}
         <div class="contact">${bill.clients?.address ? `${bill.clients.address}${bill.clients.wilaya ? ', ' + bill.clients.wilaya : ''}<br>` : ''}${bill.clients?.phone ? `Tél : ${bill.clients.phone}<br>` : ''}${bill.clients?.email ? `Email : ${bill.clients.email}` : ''}</div>
       </div>
     </div>
+
     <table>
-      <thead><tr><th style="width:50%">Désignation</th><th class="right">Qté</th><th class="right">Prix unit.</th><th class="right">Total HT</th></tr></thead>
+      <thead>
+        <tr>
+          <th style="width:46%">Désignation</th>
+          <th class="right" style="width:10%">Qté</th>
+          <th class="right" style="width:18%">Prix unit.</th>
+          <th class="right" style="width:13%">Remise</th>
+          <th class="right" style="width:18%">Total HT</th>
+        </tr>
+      </thead>
       <tbody>
-        ${allItems.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:40px;font-style:italic">Aucune ligne</td></tr>` : allItems.map((i: any) => `
-          <tr>
-            <td><div class="item-name">${i.products?.name || 'Article'}</div>${i.products?.description ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${i.products.description}</div>` : ''}</td>
-            <td class="right">${i.quantity}</td>
-            <td class="right">${i.unit_price.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })}</td>
-            <td class="right" style="color:${color}">${(i.quantity * i.unit_price).toLocaleString('fr-DZ', { minimumFractionDigits: 2 })}</td>
-          </tr>
-        `).join('')}
+        ${allItems.length === 0 ? `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:40px;font-style:italic">Aucune ligne</td></tr>` : allItems.map((i: any) => {
+          const lineTotal = Math.max(0, (i.quantity * i.unit_price) - (i.discount || 0))
+          return `
+            <tr>
+              <td>
+                <div class="item-name">${i.products?.name || i.name_snapshot || 'Article'}</div>
+                ${i.products?.description ? `<div style="font-size:10px;color:#64748b;margin-top:2px">${i.products.description}</div>` : ''}
+              </td>
+              <td class="right">${i.quantity}</td>
+              <td class="right">${fmt(i.unit_price)}</td>
+              <td class="right" style="color:${i.discount > 0 ? '#16a34a' : '#cbd5e1'}">${i.discount > 0 ? '− ' + fmt(i.discount) : '—'}</td>
+              <td class="right" style="color:${color}">${fmt(lineTotal)}</td>
+            </tr>
+          `
+        }).join('')}
       </tbody>
     </table>
+
     <div class="summary">
-      <div>${bill.notes ? `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:16px 20px"><div style="font-size:10px;color:#a16207;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:8px">📝 Note</div><div style="font-size:12px;color:#78350f;line-height:1.6">${bill.notes}</div></div>` : ''}</div>
-      <div class="totals">
-        ${allItems.length > 0 ? `
-          <div class="row"><span>Sous-total HT</span><span class="amount">${totalHT.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
-          ${tvaRate > 0 ? `<div class="row"><span>TVA (${tvaRate}%)</span><span class="amount">${tva.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>` : `<div class="row" style="background:#fef2f2;color:#991b1b"><span>TVA</span><span class="amount" style="font-style:italic">Exonéré</span></div>`}
+      <div>
+        ${showNotes ? `
+          <div class="notes-block">
+            <div class="label">📝 Note</div>
+            <div class="content">${bill.notes}</div>
+          </div>
         ` : ''}
-        <div class="row total"><span class="label">Total TTC</span><span class="amount">${bill.total_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
-        ${bill.paid_amount > 0 ? `<div class="row paid"><span>✓ Payé</span><span class="amount">${bill.paid_amount.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>` : ''}
-        <div class="row balance ${solde > 0 ? 'pending' : 'done'}"><span>${solde > 0 ? 'Solde restant dû' : '✓ Facture réglée'}</span><span class="amount">${solde.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })} DZD</span></div>
+        ${showTerms ? `
+          <div class="terms-block">
+            <div class="label">📋 Conditions générales</div>
+            <div class="content">${bill.terms}</div>
+          </div>
+        ` : ''}
+      </div>
+      <div class="totals">
+        <div class="row">
+          <span>Sous-total HT</span>
+          <span class="amount">${fmt(subtotal)} DZD</span>
+        </div>
+        ${discountEnabled && discountValue > 0 ? `
+          <div class="row discount">
+            <span>− Remise globale</span>
+            <span class="amount">− ${fmt(discountValue)} DZD</span>
+          </div>
+          <div class="row">
+            <span>Après remise</span>
+            <span class="amount">${fmt(afterDiscount)} DZD</span>
+          </div>
+        ` : ''}
+        ${tvaEnabled ? `
+          <div class="row">
+            <span>TVA (${tvaRate}%)</span>
+            <span class="amount">${fmt(tva)} DZD</span>
+          </div>
+        ` : `
+          <div class="row exonere">
+            <span>TVA</span>
+            <span class="amount">Exonéré</span>
+          </div>
+        `}
+        <div class="row total">
+          <span class="label">Total TTC</span>
+          <span class="amount">${fmt(bill.total_amount)} DZD</span>
+        </div>
       </div>
     </div>
-    ${bill.status === 'payé' ? '<div class="stamp">PAYÉ</div>' : ''}
-    <div class="footer">
-      <div class="msg">${s.footer_text || 'Merci de votre confiance.'}</div>
-      <div class="brand-credit"><strong>${company}</strong> · Propulsé par <strong>RSS</strong> · Développé par <strong>RS Comptabilité</strong><br><span style="font-size:9px;color:#cbd5e1">Tous droits réservés © 2026</span></div>
+
+  </div>
+
+  <div class="footer-fixed">
+    <div class="msg">${s.footer_text || 'Merci de votre confiance.'}</div>
+    <div class="credit">
+      <strong>${company}</strong> · Propulsé par <strong>RSS</strong> · Développé par <strong>RS Comptabilité</strong><br>
+      Tous droits réservés © 2026
     </div>
   </div>
 </div>
+</div>
+
 </body></html>`)
   win.document.close()
 }
