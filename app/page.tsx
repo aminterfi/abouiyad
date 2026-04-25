@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -7,9 +7,22 @@ import Link from 'next/link'
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [checking, setChecking] = useState(true)
   const router = useRouter()
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
+
+  useEffect(() => {
+    const u = localStorage.getItem('user')
+    if (u) {
+      const parsed = JSON.parse(u)
+      if (parsed.slug) {
+        window.location.href = `/${parsed.slug}/dashboard`
+        return
+      }
+    }
+    setChecking(false)
+  }, [])
 
   async function loginOwner(e: React.FormEvent) {
     e.preventDefault()
@@ -19,10 +32,8 @@ export default function LoginPage() {
         email: ownerEmail.trim(), password: ownerPassword,
       })
       if (authErr) throw authErr
-      console.log('✅ Auth OK:', auth.user?.id)
       
       const { data: owner } = await supabase.rpc('get_owner_info', { p_user_id: auth.user!.id })
-      console.log('✅ Owner data:', owner)
       if (!owner) throw new Error('Aucune entreprise liée à ce compte')
       
       const { data: sub } = await supabase.rpc('get_company_subscription', { p_company_id: owner.company_id })
@@ -33,7 +44,6 @@ export default function LoginPage() {
       
       const { data: companyData } = await supabase.from('companies').select('slug').eq('id', owner.company_id).single()
       const companySlug = companyData?.slug || ''
-      console.log('✅ Slug:', companySlug)
       
       if (!companySlug) {
         throw new Error('Cette entreprise n\'a pas de slug. Contactez l\'administrateur.')
@@ -48,15 +58,15 @@ export default function LoginPage() {
       localStorage.setItem('user', JSON.stringify(userData))
       if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
       
-      console.log('✅ User stored, redirecting to:', `/${companySlug}/dashboard`)
-      
-      // Utiliser window.location au lieu de router.push pour forcer un reload complet
       window.location.href = `/${companySlug}/dashboard`
     } catch (err: any) {
-      console.error('❌ Login error:', err)
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : err.message)
       setLoading(false)
     }
+  }
+
+  if (checking) {
+    return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8f7f5',color:'#a8a69e',fontFamily:'Outfit,sans-serif'}}>Chargement...</div>
   }
 
   return (
