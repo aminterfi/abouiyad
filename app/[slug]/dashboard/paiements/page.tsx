@@ -124,16 +124,25 @@ export default function PaiementsPage() {
   async function fetch() {
     setLoading(true)
     const u = JSON.parse(localStorage.getItem('user')||'{}')
-    if (!u.company_id) { setLoading(false); return }
+    console.log('🔵 Fetching payments for company_id:', u.company_id)
+    
+    if (!u.company_id) { 
+      console.log('❌ No company_id')
+      setLoading(false)
+      return 
+    }
 
-    const [{ data: pays }, { data: s }] = await Promise.all([
-      supabase
-        .from('payments')
-        .select('*, bills(invoice_number, total_amount, paid_amount, status, clients(full_name,phone,address,wilaya)), users:created_by(full_name)')
-        .eq('company_id', u.company_id)
-        .order('created_at', { ascending: false }),
-      supabase.from('settings').select('*').eq('company_id', u.company_id).maybeSingle(),
-    ])
+    const { data: pays, error: payErr } = await supabase
+      .from('payments')
+      .select('*, bills(invoice_number, total_amount, paid_amount, status, clients(full_name,phone,address,wilaya))')
+      .eq('company_id', u.company_id)
+      .order('created_at', { ascending: false })
+    
+    console.log('🔵 Payments result:', pays?.length, 'paiements')
+    console.log('🔵 Error:', payErr)
+    
+    const { data: s } = await supabase.from('settings').select('*').eq('company_id', u.company_id).maybeSingle()
+    
     setPayments(pays || [])
     setSettings(s || {})
     setLoading(false)
@@ -243,15 +252,15 @@ export default function PaiementsPage() {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',minWidth:800}}>
             <thead>
-              <tr>{['Date','N° Facture','Client','Méthode','Montant','Encaissé par','Actions'].map(h => (
+              <tr>{['Date','N° Facture','Client','Méthode','Montant','Actions'].map(h => (
                 <th key={h} style={{fontSize:11,fontWeight:600,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.4px',padding:'9px 14px',borderBottom:'1px solid rgba(0,0,0,0.08)',textAlign:'left',whiteSpace:'nowrap',background:'#f0eeea'}}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Chargement...</td></tr>
+                <tr><td colSpan={6} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Chargement...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>
+                <tr><td colSpan={6} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>
                   {payments.length === 0 ? 'Aucun paiement enregistré' : 'Aucun résultat avec ces filtres'}
                 </td></tr>
               ) : filtered.map(p => {
@@ -280,9 +289,7 @@ export default function PaiementsPage() {
                         +{dzd(p.amount)}
                       </span>
                     </td>
-                    <td style={{padding:'12px 14px',fontSize:12,color:'#6b6860'}}>
-                      {p.users?.full_name || '—'}
-                    </td>
+                    
                     <td style={{padding:'12px 14px'}}>
                       <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>showReceipt(p)}>
                         📄 Reçu
