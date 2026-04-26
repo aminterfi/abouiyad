@@ -105,6 +105,7 @@ body{background:#f1f5f9;padding:20px 10px;-webkit-print-color-adjust:exact;print
 
 export default function PaiementsPage() {
   const [payments, setPayments] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
   const [settings, setSettings] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -124,28 +125,34 @@ export default function PaiementsPage() {
   async function fetch() {
     setLoading(true)
     const u = JSON.parse(localStorage.getItem('user')||'{}')
-    console.log('🔵 Fetching payments for company_id:', u.company_id)
-    
-    if (!u.company_id) { 
-      console.log('❌ No company_id')
-      setLoading(false)
-      return 
-    }
+    if (!u.company_id) { setLoading(false); return }
 
-    const { data: pays, error: payErr } = await supabase
-      .from('payments')
-      .select('*, bills(invoice_number, total_amount, paid_amount, status, clients(full_name,phone,address,wilaya))')
-      .eq('company_id', u.company_id)
-      .order('created_at', { ascending: false })
-    
-    console.log('🔵 Payments result:', pays?.length, 'paiements')
-    console.log('🔵 Error:', payErr)
-    
-    const { data: s } = await supabase.from('settings').select('*').eq('company_id', u.company_id).maybeSingle()
+    // Récupérer paiements + users de l'entreprise + settings
+    const [{ data: pays }, { data: usrs }, { data: s }] = await Promise.all([
+      supabase
+        .from('payments')
+        .select('*, bills(invoice_number, total_amount, paid_amount, status, clients(full_name,phone,address,wilaya))')
+        .eq('company_id', u.company_id)
+        .order('created_at', { ascending: false }),
+      supabase.from('users').select('id, full_name').eq('company_id', u.company_id),
+      supabase.from('settings').select('*').eq('company_id', u.company_id).maybeSingle(),
+    ])
     
     setPayments(pays || [])
+    setUsers(usrs || [])
     setSettings(s || {})
     setLoading(false)
+  }
+
+  function getCreatorName(p: any): string {
+    if (!p.created_by) return '—'
+    // Chercher dans les users employés
+    const emp = users.find(u => u.id === p.created_by)
+    if (emp) return emp.full_name
+    // Sinon c'est probablement un owner (auth.users)
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+    if (currentUser.id === p.created_by) return currentUser.full_name + ' (vous)'
+    return 'Propriétaire'
   }
 
   function showReceipt(p: any) {
@@ -153,14 +160,29 @@ export default function PaiementsPage() {
     setPdfModalHtml(html)
   }
 
+  async function deletePayment(p: any) {
+    const msg = `⚠️ Supprimer ce paiement de ${dzd(p.amount)} ?\n\n` +
+                `Le solde de la facture ${p.bills?.invoice_number || ''} sera recalculé automatiquement.\n\n` +
+                `Cette action est irréversible.`
+    if (!confirm(msg)) return
+    
+    const { error } = await supabase.from('payments').delete().eq('id', p.id)
+    if (error) {
+      alert('Erreur : ' + error.message)
+      return
+    }
+    fetch()
+  }
+
   function exportCSV() {
-    const headers = ['Date', 'N° Facture', 'Client', 'Méthode', 'Montant', 'Note']
+    const headers = ['Date', 'N° Facture', 'Client', 'Méthode', 'Montant', 'Encaissé par', 'Note']
     const rows = filtered.map(p => [
       new Date(p.created_at).toLocaleDateString('fr-DZ'),
       p.bills?.invoice_number || '',
       p.bills?.clients?.full_name || '',
       p.method,
       p.amount,
+      getCreatorName(p),
       p.notes || ''
     ])
     const csv = [headers, ...rows].map(r => r.join(';')).join('\n')
@@ -197,7 +219,6 @@ export default function PaiementsPage() {
     .filter(p => new Date(p.created_at).toDateString() === today)
     .reduce((s, p) => s + (p.amount || 0), 0)
 
-  // Méthodes uniques pour filtre
   const uniqueMethods = Array.from(new Set(payments.map(p => p.method).filter(Boolean)))
 
   return (
@@ -210,7 +231,6 @@ export default function PaiementsPage() {
         <button style={btnG} onClick={exportCSV}>📊 Export CSV</button>
       </div>
 
-      {/* STATS */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:12,marginBottom:16}}>
         {[
           { label:'Total encaissé', val:dzd(totalEncaisse), color:'#16a34a', mono:true, sub:`${filtered.length} paiement(s)` },
@@ -226,7 +246,6 @@ export default function PaiementsPage() {
         ))}
       </div>
 
-      {/* FILTRES */}
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:7,background:'#fff',border:'1px solid rgba(0,0,0,0.14)',borderRadius:5,padding:'7px 11px',flex:1,minWidth:180,maxWidth:300}}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a8a69e" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -247,20 +266,19 @@ export default function PaiementsPage() {
         ))}
       </div>
 
-      {/* TABLE */}
       <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.08)',borderRadius:8,overflow:'hidden'}}>
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',minWidth:800}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
             <thead>
-              <tr>{['Date','N° Facture','Client','Méthode','Montant','Actions'].map(h => (
+              <tr>{['Date','N° Facture','Client','Méthode','Montant','Encaissé par','Actions'].map(h => (
                 <th key={h} style={{fontSize:11,fontWeight:600,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.4px',padding:'9px 14px',borderBottom:'1px solid rgba(0,0,0,0.08)',textAlign:'left',whiteSpace:'nowrap',background:'#f0eeea'}}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Chargement...</td></tr>
+                <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Chargement...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>
+                <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>
                   {payments.length === 0 ? 'Aucun paiement enregistré' : 'Aucun résultat avec ces filtres'}
                 </td></tr>
               ) : filtered.map(p => {
@@ -289,11 +307,23 @@ export default function PaiementsPage() {
                         +{dzd(p.amount)}
                       </span>
                     </td>
-                    
+                    <td style={{padding:'12px 14px',fontSize:12,color:'#6b6860'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <div style={{width:24,height:24,borderRadius:'50%',background:'#f0eeea',color:'#6b6860',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>
+                          {getCreatorName(p).split(' ').map((w:string) => w[0]).slice(0,2).join('')}
+                        </div>
+                        <span style={{fontSize:12}}>{getCreatorName(p)}</span>
+                      </div>
+                    </td>
                     <td style={{padding:'12px 14px'}}>
-                      <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>showReceipt(p)}>
-                        📄 Reçu
-                      </button>
+                      <div style={{display:'flex',gap:5}}>
+                        <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>showReceipt(p)} title="Voir reçu">
+                          📄
+                        </button>
+                        <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>deletePayment(p)} title="Supprimer">
+                          🗑
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -303,7 +333,6 @@ export default function PaiementsPage() {
         </div>
       </div>
 
-      {/* MODAL PDF */}
       {pdfModalHtml && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:9999,display:'flex',flexDirection:'column'}}>
           <div style={{display:'flex',gap:8,padding:10,background:'#1a1916',justifyContent:'space-between',alignItems:'center'}}>
