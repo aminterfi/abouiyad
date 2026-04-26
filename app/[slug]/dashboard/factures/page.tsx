@@ -196,16 +196,12 @@ function ProductSelect({ products, value, onChange, onAdd }: any) {
 
 async function generatePDF(bill: any, settings: any) {
   const companyId = getCompanyId()
-  const [{ data: items }, { data: pays }, { data: freshSettings }] = await Promise.all([
+  const [{ data: items }, { data: freshSettings }] = await Promise.all([
     supabase.from('bill_items').select('*, products(name, description)').eq('bill_id', bill.id),
-    supabase.from('payments').select('*').eq('bill_id', bill.id).order('created_at', { ascending: true }),
     supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
   ])
   const s = freshSettings || settings || {}
   const allItems = items || []
-
-  const win = window.open('', '_blank', 'width=900,height=1000')
-  if (!win) { alert('Autorisez les popups'); return }
 
   const subtotal = allItems.reduce((sum: number, i: any) => sum + Math.max(0, (i.quantity * i.unit_price) - (i.discount || 0)), 0)
   const discountEnabled = bill.discount_enabled === true
@@ -221,8 +217,9 @@ async function generatePDF(bill: any, settings: any) {
   const showTerms = bill.show_terms_pdf !== false && bill.terms
   const fmt = (v: number) => v.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })
 
-  win.document.write(`<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"><title>${bill.invoice_number}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
@@ -230,69 +227,71 @@ async function generatePDF(bill: any, settings: any) {
 @page { size: A4; margin: 0; }
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',-apple-system,sans-serif}
 body{background:#f1f5f9;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.page-wrap{padding:30px 20px;min-height:100vh}
-.page{background:#fff;max-width:210mm;min-height:297mm;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,0.08);border-radius:2px;position:relative;display:flex;flex-direction:column}
+.page-wrap{padding:20px 10px;min-height:100vh}
+.page{background:#fff;max-width:210mm;width:100%;min-height:297mm;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,0.08);border-radius:2px;position:relative;display:flex;flex-direction:column}
 .accent-bar{height:8px;background:linear-gradient(90deg,${color},${color}cc,${color});flex-shrink:0}
-.inner{padding:45px 50px 110px 50px;flex:1}
+.inner{padding:35px 35px 110px 35px;flex:1}
+@media (min-width: 768px){ .inner{padding:45px 50px 110px 50px} .page-wrap{padding:30px 20px} }
 
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:38px}
-.brand{display:flex;align-items:center;gap:16px}
-.brand-logo{width:60px;height:60px;border-radius:12px;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:24px;letter-spacing:-1px;box-shadow:0 8px 20px ${color}40;overflow:hidden}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;flex-wrap:wrap;gap:16px}
+.brand{display:flex;align-items:center;gap:14px}
+.brand-logo{width:54px;height:54px;border-radius:12px;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px;letter-spacing:-1px;box-shadow:0 8px 20px ${color}40;overflow:hidden;flex-shrink:0}
 .brand-logo img{max-width:100%;max-height:100%;object-fit:contain}
-.brand-info .name{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.5px;margin-bottom:3px}
-.brand-info .tag{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:600}
-.brand-info .meta{font-size:10.5px;color:#64748b;margin-top:6px;line-height:1.6}
+.brand-info .name{font-size:18px;font-weight:800;color:#0f172a;letter-spacing:-.5px;margin-bottom:3px}
+.brand-info .tag{font-size:9.5px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:600}
+.brand-info .meta{font-size:10px;color:#64748b;margin-top:6px;line-height:1.6}
 
 .doc-label{text-align:right}
-.doc-label .type{font-size:10px;color:${color};text-transform:uppercase;letter-spacing:3px;font-weight:700;margin-bottom:6px}
-.doc-label h1{font-size:38px;font-weight:800;color:#0f172a;letter-spacing:-1.5px;line-height:1;margin-bottom:10px}
-.doc-label .num{display:inline-block;background:${color}12;color:${color};padding:7px 14px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px}
+.doc-label .type{font-size:9px;color:${color};text-transform:uppercase;letter-spacing:3px;font-weight:700;margin-bottom:6px}
+.doc-label h1{font-size:32px;font-weight:800;color:#0f172a;letter-spacing:-1.5px;line-height:1;margin-bottom:8px}
+.doc-label .num{display:inline-block;background:${color}12;color:${color};padding:6px 12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px}
 
-.dates-grid{display:grid;grid-template-columns:repeat(${bill.order_number ? 3 : 2}, 1fr);gap:14px;margin-bottom:28px;padding:16px 20px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0}
-.dates-grid .label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:4px}
-.dates-grid .value{font-size:13px;color:#0f172a;font-weight:600}
+.dates-grid{display:grid;grid-template-columns:repeat(${bill.order_number ? 3 : 2}, 1fr);gap:12px;margin-bottom:24px;padding:14px 18px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0}
+.dates-grid .label{font-size:8.5px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px}
+.dates-grid .value{font-size:12px;color:#0f172a;font-weight:600}
 
-.parties{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:28px}
-.party{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;position:relative;overflow:hidden}
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}
+@media (max-width: 600px){.parties{grid-template-columns:1fr}}
+.party{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;position:relative;overflow:hidden}
 .party::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:${color}}
-.party .label{font-size:10px;color:${color};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px}
-.party .name{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:6px}
-.party .contact{font-size:11px;color:#475569;line-height:1.7}
+.party .label{font-size:9px;color:${color};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px}
+.party .name{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:6px}
+.party .contact{font-size:10.5px;color:#475569;line-height:1.6}
 
-table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:24px}
-thead th{background:#0f172a;color:#fff;padding:12px 16px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px}
+table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:20px}
+thead th{background:#0f172a;color:#fff;padding:10px 12px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px}
 thead th.right{text-align:right}
 tbody tr:nth-child(even){background:#f8fafc}
-tbody td{padding:13px 16px;font-size:12.5px;color:#0f172a;border-bottom:1px solid #f1f5f9}
+tbody td{padding:10px 12px;font-size:11.5px;color:#0f172a;border-bottom:1px solid #f1f5f9}
 tbody td.right{text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600}
 tbody td .item-name{font-weight:600;color:#0f172a}
-tbody td .item-discount{font-size:10px;color:#16a34a;margin-top:2px;font-weight:500}
 tbody tr:last-child td{border-bottom:none}
 
-.summary{display:grid;grid-template-columns:1fr 320px;gap:22px;margin-top:24px;align-items:start}
+.summary{display:grid;grid-template-columns:1fr 280px;gap:18px;margin-top:20px;align-items:start}
+@media (max-width: 600px){.summary{grid-template-columns:1fr}}
 
-.notes-block{background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:14px 18px;margin-bottom:12px}
-.notes-block .label{font-size:9px;color:#a16207;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:6px}
-.notes-block .content{font-size:11.5px;color:#78350f;line-height:1.6;white-space:pre-wrap}
+.notes-block{background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:10px}
+.notes-block .label{font-size:8.5px;color:#a16207;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:6px}
+.notes-block .content{font-size:11px;color:#78350f;line-height:1.5;white-space:pre-wrap}
 
-.terms-block{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px}
-.terms-block .label{font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:6px}
-.terms-block .content{font-size:10.5px;color:#475569;line-height:1.6;white-space:pre-wrap}
+.terms-block{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px}
+.terms-block .label{font-size:8.5px;color:#475569;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:6px}
+.terms-block .content{font-size:10px;color:#475569;line-height:1.5;white-space:pre-wrap}
 
 .totals{background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}
-.totals .row{display:flex;justify-content:space-between;align-items:center;padding:11px 20px;font-size:12.5px;color:#475569;border-bottom:1px solid #e2e8f0}
+.totals .row{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;font-size:11.5px;color:#475569;border-bottom:1px solid #e2e8f0}
 .totals .row .amount{font-family:'JetBrains Mono',monospace;font-weight:600;color:#0f172a}
 .totals .row.discount{color:#16a34a}
 .totals .row.discount .amount{color:#16a34a}
 .totals .row.exonere{background:#fef2f2;color:#991b1b}
 .totals .row.exonere .amount{color:#991b1b;font-style:italic}
-.totals .row.total{background:${color};color:#fff;padding:16px 20px;border-bottom:none}
-.totals .row.total .label{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1.2px}
-.totals .row.total .amount{color:#fff;font-size:19px;font-weight:800}
+.totals .row.total{background:${color};color:#fff;padding:13px 16px;border-bottom:none}
+.totals .row.total .label{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:1.2px}
+.totals .row.total .amount{color:#fff;font-size:17px;font-weight:800}
 
-.footer-fixed{position:absolute;bottom:0;left:0;right:0;padding:18px 50px;border-top:2px solid ${color};background:#fff;text-align:center}
-.footer-fixed .msg{font-size:10.5px;color:#475569;font-style:italic;margin-bottom:8px;line-height:1.5}
-.footer-fixed .credit{font-size:9.5px;color:#94a3b8;line-height:1.5}
+.footer-fixed{position:absolute;bottom:0;left:0;right:0;padding:14px 35px;border-top:2px solid ${color};background:#fff;text-align:center}
+.footer-fixed .msg{font-size:10px;color:#475569;font-style:italic;margin-bottom:6px;line-height:1.4}
+.footer-fixed .credit{font-size:9px;color:#94a3b8;line-height:1.4}
 .footer-fixed .credit strong{color:${color};font-weight:700}
 
 @media print {
@@ -301,16 +300,17 @@ tbody tr:last-child td{border-bottom:none}
   .page{box-shadow:none;border-radius:0;min-height:auto}
   .toolbar{display:none !important}
 }
-
-.toolbar{position:fixed;top:20px;right:20px;display:flex;gap:10px;z-index:100;background:#fff;padding:10px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12)}
-.toolbar button{padding:10px 20px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Inter',sans-serif}
+.toolbar{position:fixed;top:12px;left:12px;right:12px;display:flex;gap:8px;z-index:1000;background:#fff;padding:10px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.15)}
+.toolbar button{flex:1;padding:12px 14px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Inter',sans-serif}
 .btn-print{background:${color};color:#fff}
+.btn-share{background:#10b981;color:#fff}
 .btn-close{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
+@media (min-width: 768px){.toolbar{top:20px;right:20px;left:auto;width:auto}.toolbar button{flex:initial;padding:10px 20px}}
 </style></head><body>
 
 <div class="toolbar">
   <button class="btn-print" onclick="window.print()">🖨️ Imprimer / PDF</button>
-  <button class="btn-close" onclick="window.close()">✕ Fermer</button>
+  <button class="btn-close" onclick="window.parent.postMessage('closePdfModal','*')">✕ Fermer</button>
 </div>
 
 <div class="page-wrap">
@@ -382,7 +382,7 @@ tbody tr:last-child td{border-bottom:none}
             <tr>
               <td>
                 <div class="item-name">${i.products?.name || i.name_snapshot || 'Article'}</div>
-                ${i.products?.description ? `<div style="font-size:10px;color:#64748b;margin-top:2px">${i.products.description}</div>` : ''}
+                ${i.products?.description ? `<div style="font-size:9.5px;color:#64748b;margin-top:2px">${i.products.description}</div>` : ''}
               </td>
               <td class="right">${i.quantity}</td>
               <td class="right">${fmt(i.unit_price)}</td>
@@ -454,10 +454,14 @@ tbody tr:last-child td{border-bottom:none}
 </div>
 </div>
 
-</body></html>`)
-  win.document.close()
-}
+</body></html>`
 
+  // Stocker dans une variable globale pour la modal
+  ;(window as any).__pdfHtml = html
+  ;(window as any).__pdfTitle = bill.invoice_number
+  // Trigger l'ouverture de la modal via event
+  window.dispatchEvent(new CustomEvent('open-pdf-modal'))
+}
 async function generateReceiptPDF(payment: any, bill: any, settings: any) {
   const companyId = getCompanyId()
   const [{ data: freshBill }, { data: freshSettings }] = await Promise.all([
@@ -548,7 +552,23 @@ export default function FacturesPage() {
   const [error, setError] = useState('')
   const [form, setForm] = useState<any>({ client_id:'', note:'', date_due:'', items:[{ product_id:'', qty:1, price:0 }] })
   const [paiForm, setPaiForm] = useState({ amount:'', method:'Virement CPA', note:'' })
+const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
 
+  useEffect(() => {
+    function openPdf() {
+      const html = (window as any).__pdfHtml
+      if (html) setPdfModalHtml(html)
+    }
+    function closePdf(e: MessageEvent) {
+      if (e.data === 'closePdfModal') setPdfModalHtml(null)
+    }
+    window.addEventListener('open-pdf-modal', openPdf)
+    window.addEventListener('message', closePdf)
+    return () => {
+      window.removeEventListener('open-pdf-modal', openPdf)
+      window.removeEventListener('message', closePdf)
+    }
+  }, [])
   useEffect(() => { fetchAll() }, [])
 
   useEffect(() => {
@@ -932,6 +952,16 @@ export default function FacturesPage() {
           </table>
         </div>
       </div>
+      
+      {pdfModalHtml && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:9999,display:'flex',flexDirection:'column'}}>
+          <div style={{display:'flex',gap:8,padding:10,background:'#1a1916',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{color:'#fff',fontSize:13,fontWeight:600,paddingLeft:8}}>📄 Aperçu facture</div>
+            <button onClick={()=>setPdfModalHtml(null)} style={{padding:'8px 16px',background:'#dc2626',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:13,fontWeight:600}}>✕ Fermer</button>
+          </div>
+          <iframe srcDoc={pdfModalHtml} style={{flex:1,border:'none',background:'#fff'}} title="PDF"/>
+        </div>
+      )}
     </div>
   )
 }
