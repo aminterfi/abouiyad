@@ -4,6 +4,112 @@ import { useRouter, usePathname, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
+function CompanySwitcher({ slug, companyName, settings, collapsed }: any) {
+  const [open, setOpen] = useState(false)
+  const [companies, setCompanies] = useState<any[]>([])
+
+  useEffect(() => {
+    const stored = localStorage.getItem('owner_companies')
+    if (stored) {
+      setCompanies(JSON.parse(stored))
+    } else {
+      const u = JSON.parse(localStorage.getItem('user') || '{}')
+      if (u.id && u.type === 'owner') {
+        supabase.rpc('get_owner_companies', { p_user_id: u.id }).then(({ data }) => {
+          if (data) {
+            setCompanies(data)
+            localStorage.setItem('owner_companies', JSON.stringify(data))
+          }
+        })
+      }
+    }
+  }, [])
+
+  function switchCompany(c: any) {
+    const u = JSON.parse(localStorage.getItem('user') || '{}')
+    const updated = { ...u, company_id: c.company_id, company_name: c.company_name, slug: c.slug }
+    localStorage.setItem('user', JSON.stringify(updated))
+    window.location.href = `/${c.slug}/dashboard`
+  }
+
+  const hasMultiple = companies.length > 1
+  const initial = companyName?.charAt(0).toUpperCase() || 'C'
+
+  if (collapsed) {
+    return (
+      <Link href={`/${slug}/dashboard`} style={{padding:'18px 0',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,textDecoration:'none'}}>
+        {settings.logo_url ? (
+          <img src={settings.logo_url} alt="Logo" style={{width:32,height:32,borderRadius:7,objectFit:'cover'}}/>
+        ) : (
+          <div style={{width:32,height:32,background:settings.primary_color||'#2563EB',borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:14}}>{initial}</div>
+        )}
+      </Link>
+    )
+  }
+
+  return (
+    <div style={{position:'relative',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0}}>
+      <div onClick={() => hasMultiple && setOpen(!open)}
+        style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:10,cursor:hasMultiple?'pointer':'default'}}>
+        {settings.logo_url ? (
+          <img src={settings.logo_url} alt="Logo" style={{width:32,height:32,borderRadius:7,objectFit:'cover',flexShrink:0}}/>
+        ) : (
+          <div style={{width:32,height:32,background:settings.primary_color||'#2563EB',borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:14,flexShrink:0}}>{initial}</div>
+        )}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{color:'#fff',fontWeight:600,fontSize:13,letterSpacing:'-.2px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{companyName}</div>
+          <div style={{color:'rgba(255,255,255,0.4)',fontSize:10,marginTop:2}}>
+            {hasMultiple ? `${companies.length} entreprises` : 'Entreprise active'}
+          </div>
+        </div>
+        {hasMultiple && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" style={{transform:open?'rotate(180deg)':'none',transition:'.15s'}}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        )}
+      </div>
+
+      {open && hasMultiple && (
+        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#1f1d1a',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,margin:'4px 8px',zIndex:50,maxHeight:300,overflowY:'auto',boxShadow:'0 10px 30px rgba(0,0,0,0.3)'}}>
+          {companies.map((c: any) => {
+            const isActive = c.slug === slug
+            return (
+              <div key={c.company_id}
+                onClick={() => !isActive && switchCompany(c)}
+                style={{
+                  padding:'10px 14px',
+                  display:'flex',
+                  alignItems:'center',
+                  gap:10,
+                  cursor: isActive ? 'default' : 'pointer',
+                  background: isActive ? 'rgba(37,99,235,0.2)' : 'transparent',
+                  borderBottom: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                {c.logo_url ? (
+                  <img src={c.logo_url} style={{width:26,height:26,borderRadius:6,objectFit:'cover'}}/>
+                ) : (
+                  <div style={{width:26,height:26,background:c.primary_color||'#2563EB',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:11}}>
+                    {c.company_name?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:'#fff',fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.company_name}</div>
+                  <div style={{color:'rgba(255,255,255,0.3)',fontSize:9,fontFamily:'JetBrains Mono,monospace',marginTop:1}}>/{c.slug}</div>
+                </div>
+                {isActive && <span style={{fontSize:10,color:'#2563EB',fontWeight:600}}>● Active</span>}
+                {c.is_primary && !isActive && <span style={{fontSize:9,color:'rgba(255,255,255,0.4)'}}>★</span>}
+              </div>
+            )
+          })}
+          <Link href="/hub" 
+            style={{display:'block',padding:'10px 14px',color:'#2563EB',fontSize:12,textDecoration:'none',fontWeight:600,borderTop:'1px solid rgba(255,255,255,0.1)',textAlign:'center'}}>
+            🏢 Voir toutes mes entreprises
+          </Link>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const DashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
 const BillIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -40,11 +146,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     setMounted(true)
-    console.log('🔵 Dashboard layout mount, slug:', slug)
     const u = localStorage.getItem('user')
-    console.log('🔵 User in localStorage:', u)
     if (!u) {
-      console.log('❌ No user, redirecting to /', slug)
       router.push(`/${slug}`)
       return
     }
@@ -87,6 +190,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   function logout() {
     localStorage.removeItem('user')
     localStorage.removeItem('subscription')
+    localStorage.removeItem('owner_companies')
     supabase.auth.signOut()
     router.push(`/${slug}`)
   }
@@ -105,19 +209,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => (
     <div style={{width:inDrawer?240:sidebarWidth,background:'#1a1916',display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',transition:'width .25s ease'}}>
-      <Link href={`/${slug}`} style={{padding:(collapsed && !inDrawer)?'18px 0':'18px 16px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:(collapsed && !inDrawer)?'center':'flex-start',gap:10,flexShrink:0,textDecoration:'none'}}>
-        {settings.logo_url ? (
-          <img src={settings.logo_url} alt="Logo" style={{width:32,height:32,borderRadius:7,objectFit:'cover',flexShrink:0}}/>
-        ) : (
-          <div style={{width:32,height:32,background:settings.primary_color||'#2563EB',borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:14,flexShrink:0}}>{companyName.charAt(0)}</div>
-        )}
-        {(!collapsed || inDrawer) && (
-          <div>
-            <div style={{color:'#fff',fontWeight:600,fontSize:14,letterSpacing:'-.2px'}}>{companyName}</div>
-            <div style={{color:'rgba(255,255,255,0.3)',fontSize:10}}>RS Comptabilité</div>
-          </div>
-        )}
-      </Link>
+      <CompanySwitcher 
+        slug={slug} 
+        companyName={companyName} 
+        settings={settings} 
+        collapsed={collapsed && !inDrawer} 
+      />
 
       <nav style={{flex:1,padding:(collapsed && !inDrawer)?'10px 6px':'10px 8px',overflowY:'auto',overflowX:'hidden'}}>
         {SECTIONS.map(section => {
@@ -181,7 +278,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b6860" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
           )}
-          <Link href={`/${slug}`} style={{fontSize:12,color:'#2563EB',textDecoration:'none',padding:'4px 10px',background:'rgba(37,99,235,0.08)',borderRadius:5,fontWeight:500}}>← Hub</Link>
+          <Link href="/hub" style={{fontSize:12,color:'#2563EB',textDecoration:'none',padding:'4px 10px',background:'rgba(37,99,235,0.08)',borderRadius:5,fontWeight:500}}>🏢 Mes entreprises</Link>
           <span style={{flex:1,fontWeight:600,fontSize:15,color:'#1a1916'}}>{currentLabel}</span>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             {isPlatformAdmin && <span style={{fontSize:10,background:'linear-gradient(135deg,#7c3aed,#5B3DF5)',color:'#fff',padding:'3px 8px',borderRadius:20,fontWeight:600}}>👑 Admin RS</span>}
