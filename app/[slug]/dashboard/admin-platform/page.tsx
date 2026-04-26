@@ -10,7 +10,7 @@ const STATUS_BADGES: Record<string, {bg:string,color:string,label:string}> = {
   active: {bg:'rgba(22,163,74,0.1)', color:'#16a34a', label:'Actif'},
   suspended: {bg:'rgba(220,38,38,0.1)', color:'#dc2626', label:'Suspendu'},
   expired: {bg:'rgba(107,104,96,0.1)', color:'#6b6860', label:'Expiré'},
-  no_sub: {bg:'rgba(107,104,96,0.1)', color:'#6b6860', label:'Sans abonnement'},
+  no_sub: {bg:'rgba(107,104,96,0.1)', color:'#6b6860', label:'Sans abo'},
 }
 
 export default function AdminPlatform() {
@@ -33,30 +33,35 @@ export default function AdminPlatform() {
 
   async function load() {
     setLoading(true)
-    const [{ data: comps }, { data: st }] = await Promise.all([
+    const [{ data: comps, error: ce }, { data: st }] = await Promise.all([
       supabase.rpc('admin_list_companies'),
       supabase.rpc('admin_platform_stats')
     ])
+    console.log('🔵 Companies received:', comps)
+    if (ce) console.error('❌ Error:', ce)
     setCompanies(comps || [])
     setStats(st || {})
     setLoading(false)
   }
 
   const filtered = companies.filter(c => {
-    if (search && !c.out_name?.toLowerCase().includes(search.toLowerCase()) && 
-        !c.out_owner_email?.toLowerCase().includes(search.toLowerCase()) &&
-        !c.out_slug?.toLowerCase().includes(search.toLowerCase())) return false
-    if (filter !== 'all' && c.out_subscription_status !== filter) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!c.name?.toLowerCase().includes(q) &&
+          !c.owner_email?.toLowerCase().includes(q) &&
+          !c.slug?.toLowerCase().includes(q)) return false
+    }
+    if (filter !== 'all' && c.subscription_status !== filter) return false
     return true
   })
 
   function getDaysLeft(c: any): string {
-    if (c.out_subscription_status === 'trial' && c.out_trial_end) {
-      const days = Math.ceil((new Date(c.out_trial_end).getTime() - Date.now()) / 86400000)
+    if (c.subscription_status === 'trial' && c.trial_end) {
+      const days = Math.ceil((new Date(c.trial_end).getTime() - Date.now()) / 86400000)
       return days > 0 ? `${days}j restants` : 'Expiré'
     }
-    if (c.out_subscription_status === 'active' && c.out_end_date) {
-      const days = Math.ceil((new Date(c.out_end_date).getTime() - Date.now()) / 86400000)
+    if (c.subscription_status === 'active' && c.end_date) {
+      const days = Math.ceil((new Date(c.end_date).getTime() - Date.now()) / 86400000)
       return `${days}j`
     }
     return '—'
@@ -74,7 +79,6 @@ export default function AdminPlatform() {
         </div>
       </div>
 
-      {/* STATS GLOBALES */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:12,marginBottom:18}}>
         {[
           {label:'Entreprises', val:stats.total_companies||0, color:'#1a1916'},
@@ -91,7 +95,6 @@ export default function AdminPlatform() {
         ))}
       </div>
 
-      {/* FILTRES */}
       <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
         <input placeholder="Rechercher (nom, email, slug)..." value={search} onChange={e=>setSearch(e.target.value)}
           style={{flex:1,minWidth:200,padding:'8px 12px',border:'1px solid rgba(0,0,0,0.14)',borderRadius:6,fontSize:13,fontFamily:'inherit'}}/>
@@ -108,9 +111,8 @@ export default function AdminPlatform() {
         ))}
       </div>
 
-      {/* TABLE */}
       <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.08)',borderRadius:8,overflow:'auto'}}>
-        <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:1000}}>
           <thead>
             <tr style={{background:'#f0eeea'}}>
               {['Entreprise','Owner','Statut','Plan','Échéance','Stats','CA','Actions'].map(h=>(
@@ -119,34 +121,37 @@ export default function AdminPlatform() {
             </tr>
           </thead>
           <tbody>
-            {loading?<tr><td colSpan={8} style={{padding:30,textAlign:'center',color:'#a8a69e'}}>Chargement...</td></tr>
-            :filtered.length===0?<tr><td colSpan={8} style={{padding:30,textAlign:'center',color:'#a8a69e'}}>Aucune entreprise</td></tr>
-            :filtered.map(c => {
+            {loading ? (
+              <tr><td colSpan={8} style={{padding:30,textAlign:'center',color:'#a8a69e'}}>Chargement...</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={8} style={{padding:30,textAlign:'center',color:'#a8a69e'}}>Aucune entreprise</td></tr>
+            ) : filtered.map((c, idx) => {
               const badge = STATUS_BADGES[c.subscription_status] || STATUS_BADGES.no_sub
+              const id = c.company_id
               return (
-                <tr key={c.company_id} style={{borderBottom:'1px solid rgba(0,0,0,0.05)'}}>
+                <tr key={id || idx} style={{borderBottom:'1px solid rgba(0,0,0,0.05)'}}>
                   <td style={{padding:'12px 14px'}}>
-                    <div style={{fontSize:13,fontWeight:600,color:'#1a1916'}}>{c.name}</div>
-                    <div style={{fontSize:10,color:'#a8a69e',fontFamily:'JetBrains Mono,monospace',marginTop:2}}>/{c.slug}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:'#1a1916'}}>{c.name || 'Sans nom'}</div>
+                    <div style={{fontSize:10,color:'#a8a69e',fontFamily:'JetBrains Mono,monospace',marginTop:2}}>/{c.slug || '—'}</div>
                   </td>
                   <td style={{padding:'12px 14px'}}>
-                    <div style={{fontSize:12,fontWeight:500}}>{c.owner_full_name||'—'}</div>
-                    <div style={{fontSize:10,color:'#a8a69e',marginTop:2}}>{c.owner_email}</div>
+                    <div style={{fontSize:12,fontWeight:500}}>{c.owner_full_name || '—'}</div>
+                    <div style={{fontSize:10,color:'#a8a69e',marginTop:2}}>{c.owner_email || ''}</div>
                   </td>
                   <td style={{padding:'12px 14px'}}>
                     <span style={{fontSize:10,padding:'3px 8px',borderRadius:4,background:badge.bg,color:badge.color,fontWeight:600,whiteSpace:'nowrap'}}>{badge.label}</span>
                   </td>
-                  <td style={{padding:'12px 14px',fontSize:12,color:'#6b6860'}}>{c.plan}</td>
+                  <td style={{padding:'12px 14px',fontSize:12,color:'#6b6860'}}>{c.plan || '—'}</td>
                   <td style={{padding:'12px 14px',fontSize:11,color:'#6b6860',fontFamily:'JetBrains Mono,monospace'}}>{getDaysLeft(c)}</td>
                   <td style={{padding:'12px 14px',fontSize:11,color:'#6b6860'}}>
-                    {c.nb_clients}c · {c.nb_bills}f · {c.nb_users}u
+                    {c.nb_clients||0}c · {c.nb_bills||0}f · {c.nb_users||0}u
                   </td>
                   <td style={{padding:'12px 14px',fontSize:12,fontFamily:'JetBrains Mono,monospace',color:'#16a34a',fontWeight:600}}>
-                    {dzd(c.total_revenue)}
+                    {dzd(c.total_revenue || 0)}
                   </td>
                   <td style={{padding:'12px 14px'}}>
-                    <button onClick={()=>router.push(`/${slug}/dashboard/admin-platform/${c.company_id}`)}
-                      style={{padding:'5px 12px',fontSize:11,fontWeight:600,background:'#7c3aed',color:'#fff',border:'none',borderRadius:5,cursor:'pointer',fontFamily:'inherit'}}>
+                    <button onClick={()=>id && router.push(`/${slug}/dashboard/admin-platform/${id}`)}
+                      style={{padding:'5px 12px',fontSize:11,fontWeight:600,background:'#7c3aed',color:'#fff',border:'none',borderRadius:5,cursor:id?'pointer':'not-allowed',fontFamily:'inherit',opacity:id?1:0.5}}>
                       Gérer →
                     </button>
                   </td>
