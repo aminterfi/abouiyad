@@ -16,6 +16,12 @@ export default function LoginPage() {
     const u = localStorage.getItem('user')
     if (u) {
       const parsed = JSON.parse(u)
+      // Si plusieurs entreprises → hub
+      if (parsed.nb_companies && parsed.nb_companies > 1) {
+        window.location.href = '/hub'
+        return
+      }
+      // Sinon → dashboard de l'entreprise
       if (parsed.slug) {
         window.location.href = `/${parsed.slug}/dashboard`
         return
@@ -32,33 +38,61 @@ export default function LoginPage() {
         email: ownerEmail.trim(), password: ownerPassword,
       })
       if (authErr) throw authErr
-      
-      const { data: owner } = await supabase.rpc('get_owner_info', { p_user_id: auth.user!.id })
-      if (!owner) throw new Error('Aucune entreprise liée à ce compte')
-      
-      const { data: sub } = await supabase.rpc('get_company_subscription', { p_company_id: owner.company_id })
-      if (!owner.is_platform_admin && (sub?.status === 'cancelled' || sub?.status === 'expired')) {
+
+      // Récupérer toutes les entreprises de l'owner
+      const { data: companies, error: compErr } = await supabase.rpc('get_owner_companies', { 
+        p_user_id: auth.user!.id 
+      })
+      if (compErr) throw compErr
+      if (!companies || companies.length === 0) {
+        throw new Error('Aucune entreprise liée à ce compte')
+      }
+
+      // Récupérer l'abonnement de l'owner
+      const { data: subData } = await supabase.rpc('get_owner_subscription', { 
+        p_user_id: auth.user!.id 
+      })
+      const sub = subData?.[0]
+
+      // Vérifier abonnement actif (sauf platform admin)
+      const isPlatformAdmin = companies.some((c: any) => c.is_platform_admin)
+      if (!isPlatformAdmin && sub && !sub.is_active) {
         await supabase.auth.signOut()
-        throw new Error('Abonnement suspendu. Contactez RS Comptabilité.')
+        throw new Error('Abonnement suspendu ou expiré. Contactez RS Comptabilité.')
       }
-      
-      const { data: companyData } = await supabase.from('companies').select('slug').eq('id', owner.company_id).single()
-      const companySlug = companyData?.slug || ''
-      
-      if (!companySlug) {
-        throw new Error('Cette entreprise n\'a pas de slug. Contactez l\'administrateur.')
-      }
-      
+
+      // Choisir l'entreprise primary par défaut
+      const primary = companies.find((c: any) => c.is_primary) || companies[0]
+
       const userData = {
-        id: auth.user!.id, email: auth.user!.email, full_name: owner.full_name,
-        role: 'owner', company_id: owner.company_id, company_name: owner.company_name,
-        is_platform_admin: owner.is_platform_admin, type: 'owner', slug: companySlug,
+        id: auth.user!.id,
+        email: auth.user!.email,
+        full_name: primary.company_name ? companies[0].company_name : auth.user!.email,
+        role: 'owner',
+        company_id: primary.company_id,
+        company_name: primary.company_name,
+        is_platform_admin: isPlatformAdmin,
+        type: 'owner',
+        slug: primary.slug,
+        nb_companies: companies.length,
       }
-      
+
+      // Récupérer le full_name depuis owners
+      const { data: ownerInfo } = await supabase.rpc('get_owner_info', { p_user_id: auth.user!.id })
+      if (ownerInfo?.[0]) {
+        userData.full_name = ownerInfo[0].full_name
+      }
+
       localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('owner_companies', JSON.stringify(companies))
       if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
-      
-      window.location.href = `/${companySlug}/dashboard`
+
+      // Redirection
+      if (companies.length > 1) {
+        window.location.href = '/hub'
+      } else {
+        window.location.href = `/${primary.slug}/dashboard`
+      }
     } catch (err: any) {
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : err.message)
       setLoading(false)
