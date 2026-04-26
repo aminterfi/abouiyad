@@ -116,6 +116,7 @@ const BillIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="non
 const ClientIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
 const PayIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
 const ProdIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+const StockIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
 const UserIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
 const SettingIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
 const ShieldIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -138,9 +139,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Clients', href: `/${slug}/dashboard/clients`, section: 'Gestion', icon: ClientIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
     { label: 'Paiements', href: `/${slug}/dashboard/paiements`, section: 'Gestion', icon: PayIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
     { label: 'Produits', href: `/${slug}/dashboard/produits`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
-    { label: 'Stock', href: `/${slug}/dashboard/stock`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','owner'], platformAdminOnly: false },
-    { label: 'Stock', href: `/${slug}/dashboard/stock`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','owner'], platformAdminOnly: false },
-    { label: 'Stock', href: `/${slug}/dashboard/stock`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','owner'], platformAdminOnly: false },
+    { label: 'Produits', href: `/${slug}/dashboard/produits`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
+    { label: 'Stock', href: `/${slug}/dashboard/stock`, section: 'Gestion', icon: StockIcon, roles: ['superadmin','admin','employe','owner'], platformAdminOnly: false },
     { label: 'Utilisateurs', href: `/${slug}/dashboard/utilisateurs`, section: 'Administration', icon: UserIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },
     { label: 'Paramètres', href: `/${slug}/dashboard/parametres`, section: 'Administration', icon: SettingIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },
     { label: 'Admin RS', href: `/${slug}/dashboard/admin-platform`, section: 'RS Comptabilité', icon: ShieldIcon, roles: ['owner'], platformAdminOnly: true },
