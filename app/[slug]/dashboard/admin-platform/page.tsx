@@ -43,20 +43,20 @@ export default function AdminPlatform() {
   }
 
   const filtered = companies.filter(c => {
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && 
-        !c.owner_email?.toLowerCase().includes(search.toLowerCase()) &&
-        !c.slug.toLowerCase().includes(search.toLowerCase())) return false
-    if (filter !== 'all' && c.subscription_status !== filter) return false
+    if (search && !c.out_name?.toLowerCase().includes(search.toLowerCase()) && 
+        !c.out_owner_email?.toLowerCase().includes(search.toLowerCase()) &&
+        !c.out_slug?.toLowerCase().includes(search.toLowerCase())) return false
+    if (filter !== 'all' && c.out_subscription_status !== filter) return false
     return true
   })
 
   function getDaysLeft(c: any): string {
-    if (c.subscription_status === 'trial' && c.trial_end) {
-      const days = Math.ceil((new Date(c.trial_end).getTime() - Date.now()) / 86400000)
+    if (c.out_subscription_status === 'trial' && c.out_trial_end) {
+      const days = Math.ceil((new Date(c.out_trial_end).getTime() - Date.now()) / 86400000)
       return days > 0 ? `${days}j restants` : 'Expiré'
     }
-    if (c.subscription_status === 'active' && c.end_date) {
-      const days = Math.ceil((new Date(c.end_date).getTime() - Date.now()) / 86400000)
+    if (c.out_subscription_status === 'active' && c.out_end_date) {
+      const days = Math.ceil((new Date(c.out_end_date).getTime() - Date.now()) / 86400000)
       return `${days}j`
     }
     return '—'
