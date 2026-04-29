@@ -18,32 +18,100 @@ export default function SignupPage() {
     e.preventDefault()
     setError('')
 
-    if (form.password.length < 6) { setError('Le mot de passe doit contenir au moins 6 caractères'); return }
+    // Validation
+    if (!form.company_name.trim()) { setError('Le nom de l\'entreprise est requis'); return }
+    if (!form.full_name.trim()) { setError('Votre nom complet est requis'); return }
+    if (!form.email.trim()) { setError('L\'email est requis'); return }
+    if (!form.password || form.password.length < 6) { setError('Le mot de passe doit contenir au moins 6 caractères'); return }
     if (form.password !== form.confirm) { setError('Les mots de passe ne correspondent pas'); return }
 
     setLoading(true)
     try {
+      // Step 1: Create auth user
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: form.email.trim(),
         password: form.password,
       })
-      if (authErr) throw authErr
-      if (!authData.user) throw new Error('Impossible de créer le compte')
+      if (authErr) {
+        // Handle specific auth errors
+        if (authErr.message.includes('already registered')) {
+          setError('Cet email est déjà utilisé. Veuillez vous connecter.')
+        } else if (authErr.message.includes('Invalid email')) {
+          setError('Adresse email invalide')
+        } else {
+          throw authErr
+        }
+        setLoading(false)
+        return
+      }
+      if (!authData.user) throw new Error('Impossible de créer le compte utilisateur')
 
-      const { error: rpcErr } = await supabase.rpc('create_company_with_owner', {
-        p_company_name: form.company_name,
-        p_owner_email: form.email.trim(),
+      // Step 2: Create company and link to user
+      // Try the main RPC function first
+      let rpcResult = await supabase.rpc('create_company_with_owner', {
+        p_company_name: form.company_name.trim(),
+        p_owner_email: form.email.trim().toLowerCase(),
         p_owner_id: authData.user.id,
-        p_owner_full_name: form.full_name,
-        p_owner_phone: form.phone || null,
+        p_owner_full_name: form.full_name.trim(),
+        p_owner_phone: form.phone?.trim() || null,
       })
-      if (rpcErr) throw rpcErr
+
+      // If RPC fails, try alternative function
+      if (rpcResult.error) {
+        console.log('Primary RPC failed, trying alternative:', rpcResult.error.message)
+        
+        rpcResult = await supabase.rpc('add_company_to_owner', {
+          p_user_id: authData.user.id,
+          p_company_name: form.company_name.trim(),
+          p_slug: form.company_name.toLowerCase().trim().replace(/[^a-z0-9]/g, '-'),
+          p_currency: 'DZD'
+        })
+      }
+
+      // If still fails, create company manually
+      if (rpcResult.error) {
+        console.log('RPC failed, creating manually:', rpcResult.error.message)
+        
+        // Create company
+        const { data: companyData, error: companyErr } = await supabase
+          .from('companies')
+          .insert({
+            name: form.company_name.trim(),
+            slug: form.company_name.toLowerCase().trim().replace(/[^a-z0-9]/g, '-'),
+            owner_id: authData.user.id,
+            sub_status: 'trial',
+            sub_trial_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .select()
+          .single()
+        
+        if (companyErr) throw companyErr
+        
+        // Create user record
+        const { error: userErr } = await supabase
+          .from('users')
+          .update({
+            company_id: companyData.id,
+            full_name: form.full_name.trim(),
+            phone: form.phone?.trim() || null,
+            role: 'admin',
+          })
+          .eq('id', authData.user.id)
+        
+        if (userErr) console.log('User update warning:', userErr.message)
+      }
 
       setSuccess(true)
       setTimeout(() => router.push('/'), 3000)
     } catch (err: any) {
-      if (err.message?.includes('already registered')) setError('Cet email est déjà utilisé')
-      else setError(err.message || 'Erreur lors de la création')
+      console.error('Signup error:', err)
+      if (err.message?.includes('already registered')) {
+        setError('Cet email est déjà utilisé')
+      } else if (err.message?.includes('duplicate')) {
+        setError('Cette entreprise ou cet email existe déjà')
+      } else {
+        setError(err.message || 'Erreur lors de la création du compte')
+      }
     }
     setLoading(false)
   }
