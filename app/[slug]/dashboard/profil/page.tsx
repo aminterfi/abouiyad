@@ -27,10 +27,12 @@ export default function ProfilPage() {
   }, [])
 
   async function fetchStats(uid: string) {
+    const u = JSON.parse(localStorage.getItem('user')||'{}')
+    if (!u.company_id) return
     const [{ count: bills }, { count: payments }, { count: clients }] = await Promise.all([
-      supabase.from('bills').select('*',{count:'exact',head:true}).eq('created_by',uid),
-      supabase.from('payments').select('*',{count:'exact',head:true}).eq('created_by',uid),
-      supabase.from('clients').select('*',{count:'exact',head:true}).eq('created_by',uid),
+      supabase.from('bills').select('*',{count:'exact',head:true}).eq('created_by',uid).eq('company_id',u.company_id),
+      supabase.from('payments').select('*',{count:'exact',head:true}).eq('created_by',uid).eq('company_id',u.company_id),
+      supabase.from('clients').select('*',{count:'exact',head:true}).eq('created_by',uid).eq('company_id',u.company_id),
     ])
     setStats({ bills:bills||0, payments:payments||0, clients:clients||0 })
   }
