@@ -14,16 +14,20 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-function isRpcSignatureError(message = '') {
-  return message.includes('Could not find the function') || message.includes('schema cache')
+function isAlreadyRegisteredError(message = '') {
+  return message.includes('already registered') || message.includes('already been registered')
+}
+
+function isDuplicateError(message = '') {
+  return message.includes('duplicate') || message.includes('already exists') || message.includes('existe')
 }
 
 function friendlySignupError(message = '') {
-  if (message.includes('already registered') || message.includes('already been registered')) {
+  if (isAlreadyRegisteredError(message)) {
     return 'Cet email est déjà utilisé. Veuillez vous connecter.'
   }
   if (message.includes('Invalid email')) return 'Adresse email invalide.'
-  if (message.includes('duplicate') || message.includes('already exists') || message.includes('existe')) {
+  if (isDuplicateError(message)) {
     return 'Cette entreprise, ce lien ou cet email existe déjà.'
   }
   if (message.includes('violates row-level security')) {
@@ -89,10 +93,10 @@ export default function SignupPage() {
 
       lastError = error
       console.error('Signup company creation attempt failed:', error)
-      if (!isRpcSignatureError(error.message)) break
+      if (isDuplicateError(error.message)) break
     }
 
-    throw lastError || new Error('Impossible de créer l’entreprise.')
+    throw new Error(lastError ? `Impossible de créer l’entreprise: ${lastError.message}` : 'Impossible de créer l’entreprise.')
   }
 
   async function submit(e: React.FormEvent) {
@@ -114,6 +118,7 @@ export default function SignupPage() {
 
     setLoading(true)
     try {
+      let ownerId = ''
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email,
         password: form.password,
@@ -122,10 +127,36 @@ export default function SignupPage() {
         },
       })
 
-      if (authErr) throw authErr
-      if (!authData.user) throw new Error('Impossible de créer le compte utilisateur.')
+      if (!authErr && authData.user?.identities?.length === 0) {
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: form.password,
+        })
 
-      await createCompanyForOwner(authData.user.id, email, companyName, slug, fullName, phone)
+        if (loginErr || !loginData.user) {
+          throw new Error('Cet email existe déjà. Connectez-vous avec le bon mot de passe, ou utilisez un autre email.')
+        }
+
+        ownerId = loginData.user.id
+      } else if (authErr) {
+        if (!isAlreadyRegisteredError(authErr.message)) throw authErr
+
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: form.password,
+        })
+
+        if (loginErr || !loginData.user) {
+          throw new Error('Cet email existe déjà. Connectez-vous avec le bon mot de passe, ou utilisez un autre email.')
+        }
+
+        ownerId = loginData.user.id
+      } else {
+        if (!authData.user) throw new Error('Impossible de créer le compte utilisateur.')
+        ownerId = authData.user.id
+      }
+
+      await createCompanyForOwner(ownerId, email, companyName, slug, fullName, phone)
 
       setSuccess(true)
       setTimeout(() => router.push('/'), 3000)
