@@ -22,6 +22,10 @@ function isDuplicateError(message = '') {
   return message.includes('duplicate') || message.includes('already exists') || message.includes('existe')
 }
 
+function isMissingRpcError(message = '') {
+  return message.includes('Could not find the function') || message.includes('schema cache')
+}
+
 function friendlySignupError(message = '') {
   if (isAlreadyRegisteredError(message)) {
     return 'Cet email est déjà utilisé. Veuillez vous connecter.'
@@ -117,26 +121,26 @@ export default function SignupPage() {
           p_currency: 'DZD',
         })
       },
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_owner_email: email,
-        p_owner_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-      }),
     ]
 
-    let lastError: Error | null = null
+    let lastActionableError: Error | null = null
+    let lastMissingRpcError: Error | null = null
     for (const attempt of attempts) {
       const { error } = await attempt()
       if (!error) return
 
-      lastError = error
       console.error('Signup company creation attempt failed:', error)
+      if (isMissingRpcError(error.message)) {
+        lastMissingRpcError = error
+        continue
+      }
+
+      lastActionableError = error
       if (isDuplicateError(error.message)) break
     }
 
-    throw new Error(lastError ? `Impossible de créer l’entreprise: ${lastError.message}` : 'Impossible de créer l’entreprise.')
+    const finalError = lastActionableError || lastMissingRpcError
+    throw new Error(finalError ? `Impossible de créer l’entreprise: ${finalError.message}` : 'Impossible de créer l’entreprise.')
   }
 
   async function submit(e: React.FormEvent) {
