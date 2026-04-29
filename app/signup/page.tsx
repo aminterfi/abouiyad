@@ -52,37 +52,77 @@ export default function SignupPage() {
     confirm: '',
   })
 
+  async function repairOwnerProfile(ownerId: string, email: string, fullName: string, phone: string | null) {
+    const ownerRows = [
+      { user_id: ownerId, email, full_name: fullName, phone },
+      { id: ownerId, user_id: ownerId, email, full_name: fullName, phone },
+    ]
+
+    for (const row of ownerRows) {
+      const { error } = await supabase.from('owners').upsert(row)
+      if (!error) return
+      console.error('Owner repair attempt failed:', error)
+    }
+  }
+
   async function createCompanyForOwner(ownerId: string, email: string, companyName: string, slug: string, fullName: string, phone: string | null) {
     const attempts = [
       () => supabase.rpc('create_company_with_owner', {
         p_company_name: companyName,
         p_slug: slug,
         p_owner_email: email,
-        p_owner_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-        p_currency: 'DZD',
-      }),
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_slug: slug,
-        p_owner_email: email,
-        p_owner_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-      }),
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_owner_email: email,
-        p_owner_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-      }),
-      () => supabase.rpc('add_company_to_owner', {
         p_user_id: ownerId,
+        p_owner_full_name: fullName,
+        p_owner_phone: phone,
+        p_currency: 'DZD',
+      }),
+      () => supabase.rpc('create_company_with_owner', {
         p_company_name: companyName,
         p_slug: slug,
+        p_owner_email: email,
+        p_user_id: ownerId,
+        p_owner_full_name: fullName,
+        p_owner_phone: phone,
+      }),
+      () => supabase.rpc('create_company_with_owner', {
+        p_company_name: companyName,
+        p_slug: slug,
+        p_owner_email: email,
+        p_owner_id: ownerId,
+        p_owner_full_name: fullName,
+        p_owner_phone: phone,
         p_currency: 'DZD',
+      }),
+      () => supabase.rpc('create_company_with_owner', {
+        p_company_name: companyName,
+        p_slug: slug,
+        p_owner_email: email,
+        p_owner_id: ownerId,
+        p_owner_full_name: fullName,
+        p_owner_phone: phone,
+      }),
+      () => supabase.rpc('create_company_with_owner', {
+        p_company_name: companyName,
+        p_owner_email: email,
+        p_user_id: ownerId,
+        p_owner_full_name: fullName,
+        p_owner_phone: phone,
+      }),
+      async () => {
+        await repairOwnerProfile(ownerId, email, fullName, phone)
+        return supabase.rpc('add_company_to_owner', {
+          p_user_id: ownerId,
+          p_company_name: companyName,
+          p_slug: slug,
+          p_currency: 'DZD',
+        })
+      },
+      () => supabase.rpc('create_company_with_owner', {
+        p_company_name: companyName,
+        p_owner_email: email,
+        p_owner_id: ownerId,
+        p_owner_full_name: fullName,
+        p_owner_phone: phone,
       }),
     ]
 
