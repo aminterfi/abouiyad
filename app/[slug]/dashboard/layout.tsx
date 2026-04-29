@@ -139,7 +139,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Clients', href: `/${slug}/dashboard/clients`, section: 'Gestion', icon: ClientIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
     { label: 'Paiements', href: `/${slug}/dashboard/paiements`, section: 'Gestion', icon: PayIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
     { label: 'Produits', href: `/${slug}/dashboard/produits`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
-    { label: 'Produits', href: `/${slug}/dashboard/produits`, section: 'Gestion', icon: ProdIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
     { label: 'Stock', href: `/${slug}/dashboard/stock`, section: 'Gestion', icon: StockIcon, roles: ['superadmin','admin','employe','owner'], platformAdminOnly: false },
     { label: 'Utilisateurs', href: `/${slug}/dashboard/utilisateurs`, section: 'Administration', icon: UserIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },
     { label: 'Paramètres', href: `/${slug}/dashboard/parametres`, section: 'Administration', icon: SettingIcon, roles: ['superadmin','admin','owner'], platformAdminOnly: false },

@@ -45,7 +45,8 @@ export default function SlugHomePage() {
         email: ownerEmail.trim(), password: ownerPassword,
       })
       if (authErr) throw authErr
-      const { data: owner } = await supabase.rpc('get_owner_info', { p_user_id: auth.user!.id })
+      const { data: ownerData } = await supabase.rpc('get_owner_info', { p_user_id: auth.user!.id })
+      const owner = Array.isArray(ownerData) ? ownerData[0] : ownerData
       if (!owner) throw new Error('Aucune entreprise liée à ce compte')
       if (owner.company_id !== company.id && !owner.is_platform_admin) {
         await supabase.auth.signOut()
