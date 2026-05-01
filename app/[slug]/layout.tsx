@@ -8,16 +8,15 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params
   const branding = await getCompanyBrandingBySlug(slug)
   const appName = branding.name
-  const icon = branding.logoUrl || '/favicon.ico'
 
   return {
     title: `${appName} | RSS`,
     applicationName: appName,
     manifest: `/${slug}/manifest.webmanifest`,
     icons: {
-      icon: [{ url: icon }],
-      shortcut: [{ url: icon }],
-      apple: [{ url: icon }],
+      icon: [{ url: `/${slug}/icon` }],
+      shortcut: [{ url: `/${slug}/icon` }],
+      apple: [{ url: `/${slug}/apple-icon` }],
     },
   }
 }
@@ -26,4 +25,3 @@ export default async function SlugLayout({ children, params }: { children: React
   const { slug } = await params
   return <SlugLayoutClient slug={slug}>{children}</SlugLayoutClient>
 }
-

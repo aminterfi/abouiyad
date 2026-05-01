@@ -8,7 +8,6 @@ export async function GET(
   const { slug } = await params
   const branding = await getCompanyBrandingBySlug(slug)
   const appName = branding.name
-  const icon = branding.logoUrl || '/favicon.ico'
 
   const manifest = {
     name: appName,
@@ -21,13 +20,13 @@ export async function GET(
     theme_color: branding.primaryColor || '#2563EB',
     icons: [
       {
-        src: icon,
+        src: `/${slug}/icon`,
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: icon,
+        src: `/${slug}/apple-icon`,
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any',
@@ -42,4 +41,3 @@ export async function GET(
     },
   })
 }
-
