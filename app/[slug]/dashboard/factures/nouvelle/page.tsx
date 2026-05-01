@@ -473,8 +473,10 @@ export default function NouvelleFacturePage() {
           quantity: i.quantity,
           unit_price: i.unit_price,
           discount: i.discount || 0,
+          total: Math.max(0, (i.quantity * i.unit_price) - (i.discount || 0)),
           item_type: i.type,
           name_snapshot: i.name,
+          created_by: user.id,
           company_id: user.company_id,
         }))
       )

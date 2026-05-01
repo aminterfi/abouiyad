@@ -458,15 +458,18 @@ export default function FacturesPage() {
       if (newBill) {
         const validItems = form.items.filter((i:any) => i.product_id && i.qty > 0)
         if (validItems.length > 0) {
-          await supabase.from('bill_items').insert(
+          const { error: itemsErr } = await supabase.from('bill_items').insert(
             validItems.map((i:any) => ({
               bill_id: newBill.id,
               product_id: i.product_id,
               quantity: i.qty,
               unit_price: i.price,
+              total: i.qty * i.price,
+              created_by: user.id,
               company_id: user.company_id
             }))
           )
+          if (itemsErr) throw itemsErr
         }
       }
       
