@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "supabase": "supabase",
+    "db:link": "supabase link --project-ref towxspwtfztbvahflwzd",
+    "db:pull": "supabase db pull",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
@@ -25,6 +30,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "supabase": "^2.98.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

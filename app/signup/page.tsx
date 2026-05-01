@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+// Utility function to create URL-friendly slugs
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -14,30 +15,53 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-function isAlreadyRegisteredError(message = '') {
-  return message.includes('already registered') || message.includes('already been registered')
-}
-
-function isDuplicateError(message = '') {
-  return message.includes('duplicate') || message.includes('already exists') || message.includes('existe')
-}
-
-function isMissingRpcError(message = '') {
-  return message.includes('Could not find the function') || message.includes('schema cache')
-}
-
-function friendlySignupError(message = '') {
-  if (isAlreadyRegisteredError(message)) {
+// Get user-friendly error messages in French
+function getFriendlyError(message: string): string {
+  if (message.includes('already registered') || message.includes('already been registered')) {
     return 'Cet email est déjà utilisé. Veuillez vous connecter.'
   }
   if (message.includes('Invalid email')) return 'Adresse email invalide.'
-  if (isDuplicateError(message)) {
-    return 'Cette entreprise, ce lien ou cet email existe déjà.'
+  if (message.includes('duplicate') || message.includes('already exists') || message.includes('existe')) {
+    return 'Cette entreprise existe déjà.'
   }
   if (message.includes('violates row-level security')) {
-    return 'La création est bloquée par les règles de sécurité Supabase. Vérifiez la fonction create_company_with_owner.'
+    return 'Erreur de configuration. Veuillez contacter le support.'
   }
-  return message || 'Erreur lors de la création du compte.'
+  if (message.includes('Could not find the function') || message.includes('schema cache')) {
+    return 'Service temporairement indisponible.'
+  }
+  return 'Une erreur est survenue. Veuillez réessayer.'
+}
+
+// Shared styles
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '11px 14px',
+  fontSize: 14,
+  border: '1px solid rgba(0,0,0,0.14)',
+  borderRadius: 8,
+  background: '#f8f7f5',
+  color: '#1a1916',
+  fontFamily: 'inherit',
+  outline: 'none',
+}
+
+const pageStyle = {
+  minHeight: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 20,
+  background: 'linear-gradient(135deg, #f8f7f5 0%, #e8e6e0 100%)',
+  fontFamily: 'Outfit, sans-serif',
+}
+
+const cardStyle = {
+  background: '#fff',
+  borderRadius: 16,
+  padding: 28,
+  boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
+  border: '1px solid rgba(0,0,0,0.06)',
 }
 
 export default function SignupPage() {
@@ -56,113 +80,47 @@ export default function SignupPage() {
     confirm: '',
   })
 
-  async function repairOwnerProfile(ownerId: string, email: string, fullName: string, phone: string | null) {
-    const ownerRows = [
-      { user_id: ownerId, email, full_name: fullName, phone },
-      { id: ownerId, user_id: ownerId, email, full_name: fullName, phone },
-    ]
+  // Create company with owner via RPC
+  async function createCompanyWithOwner(ownerId: string, email: string, companyName: string, slug: string, fullName: string, phone: string | null) {
+    const { error } = await supabase.rpc('create_company_with_owner', {
+      p_company_name: companyName,
+      p_slug: slug,
+      p_owner_email: email,
+      p_user_id: ownerId,
+      p_owner_full_name: fullName,
+      p_owner_phone: phone,
+      p_currency: 'DZD',
+    })
 
-    for (const row of ownerRows) {
-      const { error } = await supabase.from('owners').upsert(row)
-      if (!error) return
-      console.error('Owner repair attempt failed:', error)
-    }
-  }
-
-  async function createCompanyForOwner(ownerId: string, email: string, companyName: string, slug: string, fullName: string, phone: string | null) {
-    const attempts = [
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_slug: slug,
-        p_owner_email: email,
-        p_user_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-        p_currency: 'DZD',
-      }),
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_slug: slug,
-        p_owner_email: email,
-        p_user_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-      }),
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_slug: slug,
-        p_owner_email: email,
-        p_owner_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-        p_currency: 'DZD',
-      }),
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_slug: slug,
-        p_owner_email: email,
-        p_owner_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-      }),
-      () => supabase.rpc('create_company_with_owner', {
-        p_company_name: companyName,
-        p_owner_email: email,
-        p_user_id: ownerId,
-        p_owner_full_name: fullName,
-        p_owner_phone: phone,
-      }),
-      async () => {
-        await repairOwnerProfile(ownerId, email, fullName, phone)
-        return supabase.rpc('add_company_to_owner', {
-          p_user_id: ownerId,
-          p_company_name: companyName,
-          p_slug: slug,
-          p_currency: 'DZD',
-        })
-      },
-    ]
-
-    let lastActionableError: Error | null = null
-    let lastMissingRpcError: Error | null = null
-    for (const attempt of attempts) {
-      const { error } = await attempt()
-      if (!error) return
-
-      console.error('Signup company creation attempt failed:', error)
-      if (isMissingRpcError(error.message)) {
-        lastMissingRpcError = error
-        continue
+    if (error) {
+      if (error.message.includes('duplicate') || error.message.includes('existe')) {
+        throw new Error('Cette entreprise existe déjà.')
       }
-
-      lastActionableError = error
-      if (isDuplicateError(error.message)) break
+      throw error
     }
-
-    const finalError = lastActionableError || lastMissingRpcError
-    throw new Error(finalError ? `Impossible de créer l’entreprise: ${finalError.message}` : 'Impossible de créer l’entreprise.')
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
 
+    // Form validation
     const companyName = form.company_name.trim()
     const slug = slugify(form.slug || companyName)
     const fullName = form.full_name.trim()
     const email = form.email.trim().toLowerCase()
     const phone = form.phone.trim() || null
 
-    if (!companyName) { setError('Le nom de l’entreprise est requis.'); return }
-    if (!slug) { setError('Le lien de l’entreprise est requis.'); return }
+    if (!companyName) { setError('Le nom de l\'entreprise est requis.'); return }
+    if (!slug) { setError('Le lien de l\'entreprise est requis.'); return }
     if (!fullName) { setError('Votre nom complet est requis.'); return }
-    if (!email) { setError('L’email est requis.'); return }
+    if (!email) { setError('L\'email est requis.'); return }
     if (!form.password || form.password.length < 6) { setError('Le mot de passe doit contenir au moins 6 caractères.'); return }
     if (form.password !== form.confirm) { setError('Les mots de passe ne correspondent pas.'); return }
 
     setLoading(true)
     try {
-      let ownerId = ''
+      // Step 1: Create auth user
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email,
         password: form.password,
@@ -171,43 +129,28 @@ export default function SignupPage() {
         },
       })
 
-      if (!authErr && authData.user?.identities?.length === 0) {
-        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-          email,
-          password: form.password,
-        })
-
-        if (loginErr || !loginData.user) {
-          throw new Error('Cet email existe déjà. Connectez-vous avec le bon mot de passe, ou utilisez un autre email.')
+      if (authErr) {
+        if (authErr.message.includes('already registered')) {
+          throw new Error('Cet email existe déjà. Connectez-vous ou utilisez un autre email.')
         }
-
-        ownerId = loginData.user.id
-      } else if (authErr) {
-        if (!isAlreadyRegisteredError(authErr.message)) throw authErr
-
-        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-          email,
-          password: form.password,
-        })
-
-        if (loginErr || !loginData.user) {
-          throw new Error('Cet email existe déjà. Connectez-vous avec le bon mot de passe, ou utilisez un autre email.')
-        }
-
-        ownerId = loginData.user.id
-      } else {
-        if (!authData.user) throw new Error('Impossible de créer le compte utilisateur.')
-        ownerId = authData.user.id
+        throw authErr
       }
 
-      await createCompanyForOwner(ownerId, email, companyName, slug, fullName, phone)
+      if (!authData.user) {
+        throw new Error('Impossible de créer le compte.')
+      }
+
+      const ownerId = authData.user.id
+
+      // Step 2: Create company
+      await createCompanyWithOwner(ownerId, email, companyName, slug, fullName, phone)
 
       setSuccess(true)
       setTimeout(() => router.push('/'), 3000)
     } catch (err: unknown) {
       console.error('Signup error:', err)
       await supabase.auth.signOut()
-      setError(friendlySignupError(err instanceof Error ? err.message : undefined))
+      setError(getFriendlyError(err instanceof Error ? err.message : ''))
     } finally {
       setLoading(false)
     }
@@ -221,26 +164,15 @@ export default function SignupPage() {
     }))
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '11px 14px',
-    fontSize: 14,
-    border: '1px solid rgba(0,0,0,0.14)',
-    borderRadius: 8,
-    background: '#f8f7f5',
-    color: '#1a1916',
-    fontFamily: 'inherit',
-    outline: 'none',
-  }
-
+  // Success state
   if (success) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'linear-gradient(135deg, #f8f7f5 0%, #e8e6e0 100%)', fontFamily: 'Outfit, sans-serif' }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 40, maxWidth: 440, textAlign: 'center', boxShadow: '0 10px 40px rgba(0,0,0,0.08)' }}>
+      <div style={pageStyle}>
+        <div style={{ ...cardStyle, maxWidth: 440, textAlign: 'center' }}>
           <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#dcfce7', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, marginBottom: 16 }}>✓</div>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Compte créé avec succès !</div>
           <div style={{ fontSize: 13, color: '#6b6860', marginBottom: 20, lineHeight: 1.5 }}>
-            Votre période d’essai de <strong>14 jours</strong> a commencé.<br />
+            Votre période d'essai de <strong>14 jours</strong> a commencé.<br />
             Confirmation envoyée à <strong>{form.email}</strong>
           </div>
           <div style={{ fontSize: 11, color: '#a8a69e' }}>Redirection en cours...</div>
@@ -250,22 +182,24 @@ export default function SignupPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'linear-gradient(135deg, #f8f7f5 0%, #e8e6e0 100%)', fontFamily: 'Outfit, sans-serif' }}>
+    <div style={pageStyle}>
       <div style={{ width: '100%', maxWidth: 480 }}>
+        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(135deg, #2563EB, #5B3DF5)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 26, fontWeight: 800, boxShadow: '0 8px 24px rgba(91,61,245,0.3)', marginBottom: 14 }}>A</div>
           <div style={{ fontSize: 26, fontWeight: 800, color: '#1a1916', letterSpacing: '-.5px' }}>Créer votre entreprise</div>
-          <div style={{ fontSize: 13, color: '#6b6860', marginTop: 6 }}>14 jours d’essai gratuit · Aucune carte bancaire requise</div>
+          <div style={{ fontSize: 13, color: '#6b6860', marginTop: 6 }}>14 jours d'essai gratuit · Aucune carte bancaire requise</div>
         </div>
 
-        <div style={{ background: '#fff', borderRadius: 16, padding: 28, boxShadow: '0 10px 40px rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.06)' }}>
+        {/* Form */}
+        <div style={cardStyle}>
           {error && (
             <div style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#dc2626', marginBottom: 16 }}>{error}</div>
           )}
 
           <form onSubmit={submit}>
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, fontWeight: 500, color: '#6b6860', marginBottom: 6, display: 'block' }}>Nom de l’entreprise *</label>
+              <label style={{ fontSize: 12, fontWeight: 500, color: '#6b6860', marginBottom: 6, display: 'block' }}>Nom de l'entreprise *</label>
               <input required autoFocus value={form.company_name} onChange={e => updateCompanyName(e.target.value)} placeholder="Ma Société SARL" style={inputStyle} />
             </div>
 
@@ -305,7 +239,7 @@ export default function SignupPage() {
             </div>
 
             <div style={{ padding: '12px 14px', background: 'rgba(91,61,245,0.05)', border: '1px solid rgba(91,61,245,0.15)', borderRadius: 8, fontSize: 11, color: '#5B3DF5', marginBottom: 16 }}>
-              <strong>✓ Période d’essai 14 jours :</strong> Accès complet à toutes les fonctionnalités.
+              <strong>✓ Période d'essai 14 jours :</strong> Accès complet à toutes les fonctionnalités.
             </div>
 
             <button type="submit" disabled={loading} style={{ width: '100%', padding: 14, fontSize: 14, fontWeight: 600, background: loading ? '#a8a69e' : 'linear-gradient(135deg, #2563EB, #5B3DF5)', color: '#fff', border: 'none', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
