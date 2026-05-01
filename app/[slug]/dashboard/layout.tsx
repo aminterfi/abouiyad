@@ -167,6 +167,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setEnabledModules(merged.length > 0 ? merged.map(v => v.toLowerCase()) : null)
   }
 
+  async function fetchModuleAccess(companyId?: string, nextSettings?: any) {
+    if (!companyId) {
+      refreshEnabledModules(nextSettings)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('company_module_access')
+      .select('module_key,is_enabled')
+      .eq('company_id', companyId)
+
+    if (error || !data || data.length === 0) {
+      refreshEnabledModules(nextSettings)
+      return
+    }
+
+    const active = data
+      .filter((row: any) => row.is_enabled !== false)
+      .map((row: any) => String(row.module_key || '').trim().toLowerCase())
+      .filter(Boolean)
+
+    setEnabledModules(active.length > 0 ? active : null)
+  }
+
   function cleanupStaleBackdrops() {
     if (typeof document === 'undefined') return
     document.body.style.overflow = ''
@@ -207,7 +231,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const parsed = JSON.parse(u)
     setUser(parsed)
     setIsPlatformAdmin(parsed.is_platform_admin === true)
-    refreshEnabledModules()
+    fetchModuleAccess(parsed.company_id)
     const savedCollapsed = localStorage.getItem('sidebar_collapsed')
     if (savedCollapsed === 'true') setCollapsed(true)
     fetchSettings(parsed.company_id)
@@ -266,10 +290,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const { data } = await supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
     if (data) {
       setSettings(data)
-      refreshEnabledModules(data)
+      fetchModuleAccess(companyId, data)
       if (data.font_family) document.body.style.fontFamily = `${data.font_family}, sans-serif`
       if (data.font_size_base) document.body.style.fontSize = `${data.font_size_base}px`
+      return
     }
+
+    fetchModuleAccess(companyId)
   }
 
   function toggleCollapsed() {
