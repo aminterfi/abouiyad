@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -126,12 +126,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<any>(null)
   const [settings, setSettings] = useState<any>({})
   const [collapsed, setCollapsed] = useState(false)
+  const [hoverExpanded, setHoverExpanded] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [open, setOpen] = useState(false)
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  const desktopSidebarWrapRef = useRef<HTMLDivElement | null>(null)
+  const hideTimerRef = useRef<number | null>(null)
 
   function cleanupStaleBackdrops() {
     if (typeof document === 'undefined') return
@@ -206,6 +209,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [])
 
+  useEffect(() => {
+    if (isMobile || !collapsed || !hoverExpanded) return
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (!desktopSidebarWrapRef.current?.contains(target)) {
+        clearHideTimer()
+        setHoverExpanded(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [isMobile, collapsed, hoverExpanded])
+
+  useEffect(() => {
+    return () => clearHideTimer()
+  }, [])
+
   async function fetchSettings(companyId?: string) {
     if (!companyId) return
     const { data } = await supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
@@ -219,6 +239,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   function toggleCollapsed() {
     const newVal = !collapsed
     setCollapsed(newVal)
+    if (!newVal) setHoverExpanded(false)
     localStorage.setItem('sidebar_collapsed', String(newVal))
   }
 
@@ -226,8 +247,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setOpen(false)
     if (!isMobile) {
       setCollapsed(true)
+      setHoverExpanded(false)
       localStorage.setItem('sidebar_collapsed', 'true')
     }
+  }
+
+  function clearHideTimer() {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current)
+      hideTimerRef.current = null
+    }
+  }
+
+  function scheduleAutoHide() {
+    clearHideTimer()
+    hideTimerRef.current = window.setTimeout(() => {
+      setHoverExpanded(false)
+    }, 1300)
+  }
+
+  function handleDesktopSidebarEnter() {
+    if (isMobile || !collapsed) return
+    clearHideTimer()
+    setHoverExpanded(true)
+  }
+
+  function handleDesktopSidebarLeave() {
+    if (isMobile || !collapsed || !hoverExpanded) return
+    scheduleAutoHide()
   }
 
   function logout() {
@@ -247,7 +294,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   
   const initials = user.full_name?.split(' ').map((w: string) => w[0]).slice(0, 2).join('') || 'U'
   const currentLabel = NAV.find(n => n.href === pathname)?.label || 'Tableau de bord'
-  const sidebarWidth = collapsed ? 64 : 218
+  const sidebarIsExpanded = !collapsed || hoverExpanded
+  const sidebarWidth = sidebarIsExpanded ? 218 : 64
   const companyName = settings.company_name || user.company_name || 'RSS'
 
   const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => (
@@ -256,21 +304,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         slug={slug} 
         companyName={companyName} 
         settings={settings} 
-        collapsed={collapsed && !inDrawer} 
+        collapsed={!sidebarIsExpanded && !inDrawer} 
       />
 
-      <nav style={{flex:1,padding:(collapsed && !inDrawer)?'10px 6px':'10px 8px',overflowY:'auto',overflowX:'hidden'}}>
+      <nav style={{flex:1,padding:(!sidebarIsExpanded && !inDrawer)?'10px 6px':'10px 8px',overflowY:'auto',overflowX:'hidden'}}>
         {SECTIONS.map(section => {
           const items = NAV.filter(n => n.section === section)
           if (items.length === 0) return null
           return (
             <div key={section}>
-              {(!collapsed || inDrawer) && <div style={{fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'.7px',padding:'8px 8px 4px'}}>{section}</div>}
-              {(collapsed && !inDrawer) && <div style={{height:12}}/>}
+              {(sidebarIsExpanded || inDrawer) && <div style={{fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'.7px',padding:'8px 8px 4px'}}>{section}</div>}
+              {(!sidebarIsExpanded && !inDrawer) && <div style={{height:12}}/>}
               {items.map(item => {
                 const Icon = item.icon
                 const active = pathname === item.href
-                const showCollapsed = collapsed && !inDrawer
+                const showCollapsed = !sidebarIsExpanded && !inDrawer
                 const isPlatformItem = item.platformAdminOnly
                 return (
                   <Link key={item.href} href={item.href} onClick={handleNavClick}
@@ -288,14 +336,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {!inDrawer && (
         <button onClick={toggleCollapsed} style={{background:'rgba(255,255,255,0.05)',border:'none',cursor:'pointer',padding:8,color:'rgba(255,255,255,0.5)',borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontSize:11,fontFamily:'inherit'}}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{transform:collapsed?'rotate(180deg)':'none',transition:'.2s'}}><polyline points="15 18 9 12 15 6"/></svg>
-          {!collapsed && 'Réduire'}
+          {sidebarIsExpanded && 'Réduire'}
         </button>
       )}
 
       <div onClick={() => router.push(`/${slug}/dashboard/profil`)}
-        style={{padding:(collapsed && !inDrawer)?'10px':12,borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:(collapsed && !inDrawer)?'center':'flex-start',gap:9,cursor:'pointer',flexShrink:0}}>
+        style={{padding:(!sidebarIsExpanded && !inDrawer)?'10px':12,borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:(!sidebarIsExpanded && !inDrawer)?'center':'flex-start',gap:9,cursor:'pointer',flexShrink:0}}>
         <div style={{width:32,height:32,borderRadius:'50%',background:isPlatformAdmin?'linear-gradient(135deg,#7c3aed,#5B3DF5)':'#2563EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0}}>{initials}</div>
-        {(!collapsed || inDrawer) && (
+        {(sidebarIsExpanded || inDrawer) && (
           <div style={{minWidth:0}}>
             <div style={{fontSize:12,fontWeight:500,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user.full_name}</div>
             <div style={{fontSize:10,color:isPlatformAdmin?'#a78bfa':'rgba(255,255,255,0.35)'}}>{isPlatformAdmin?'👑 Super Admin RS':user.role}</div>
@@ -307,7 +355,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:'#f5f4f1'}}>
-      {!isMobile && <div style={{flexShrink:0}}><Sidebar/></div>}
+      {!isMobile && (
+        <div
+          ref={desktopSidebarWrapRef}
+          style={{flexShrink:0}}
+          onMouseEnter={handleDesktopSidebarEnter}
+          onMouseLeave={handleDesktopSidebarLeave}
+        >
+          <Sidebar/>
+        </div>
+      )}
       {isMobile && open && <div data-ui-overlay="mobile-nav" onClick={() => setOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:99}}/>}
       {isMobile && (
         <div style={{position:'fixed',top:0,left:0,height:'100%',zIndex:100,transform:open?'translateX(0)':'translateX(-100%)',transition:'transform .3s ease',width:240}}>
