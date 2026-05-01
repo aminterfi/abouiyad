@@ -31,9 +31,7 @@ function ClientSelect({ options, value, onChange, onAdd }: any) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
-  const [newC, setNewC] = useState({ full_name:'', email:'', phone:'', wilaya:'' })
-  const [saving, setSaving] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [newC, setNewC] = useState({ full_name:'', email:'', phone:'', wilaya:'' })  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function handle(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setAdding(false); setQ('') } }
@@ -119,7 +117,7 @@ function ProductSelect({ products, value, onChange, onAdd }: any) {
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
   const [newP, setNewP] = useState({ name:'', price:'', category:'Service' })
-  const [saving, setSaving] = useState(false)
+    const billSaveLock = useRef(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -395,7 +393,7 @@ export default function FacturesPage() {
   const [selectedBill, setSelectedBill] = useState<any>(null)
   const [detailItems, setDetailItems] = useState<any[]>([])
   const [detailPayments, setDetailPayments] = useState<any[]>([])
-  const [saving, setSaving] = useState(false)
+    const billSaveLock = useRef(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<any>({ client_id:'', note:'', date_due:'', items:[{ product_id:'', qty:1, price:0 }] })
   const [paiForm, setPaiForm] = useState({ amount:'', method:'Virement CPA', note:'' })
@@ -434,15 +432,16 @@ export default function FacturesPage() {
   const tvaRate = settings.tva_rate||19
   const tva = totalHT * tvaRate / 100
   const totalTTC = totalHT + tva
-
   async function saveBill() {
+    if (billSaveLock.current) return
     setError('')
-    if (!form.client_id) { setError('Sélectionnez un client'); return }
+    if (!form.client_id) { setError('Selectionnez un client'); return }
     if (form.items.length === 0 || form.items.every((i:any) => !i.product_id)) { setError('Ajoutez au moins un produit'); return }
+    billSaveLock.current = true
     setSaving(true)
     try {
       const user = JSON.parse(localStorage.getItem('user')||'{}')
-      if (!user.company_id) { setError('Company ID manquant'); setSaving(false); return }
+      if (!user.company_id) { setError('Company ID manquant'); return }
       
       const { data: newBill, error: billErr } = await supabase.from('bills').insert({
         client_id: form.client_id,
@@ -478,10 +477,11 @@ export default function FacturesPage() {
       fetchAll()
     } catch (e: any) {
       setError(e.message || 'Erreur')
+    } finally {
+      setSaving(false)
+      billSaveLock.current = false
     }
-    setSaving(false)
   }
-
   async function savePai() {
     setError('')
     const amt = parseFloat(paiForm.amount)
@@ -831,3 +831,5 @@ export default function FacturesPage() {
     </div>
   )
 }``
+
+

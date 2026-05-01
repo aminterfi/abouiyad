@@ -93,8 +93,7 @@ function ClientSelector({ clients, value, onChange, onCreate }: any) {
   const selected = clients.find((c: any) => c.id === value)
 
   async function handleCreate() {
-    if (!newClient.full_name.trim()) return
-    setSaving(true)
+    if (!newClient.full_name.trim()) return.current = true(true)
     const created = await onCreate(newClient)
     if (created) {
       onChange(created.id)
@@ -242,8 +241,7 @@ function ProductSelector({ products, value, onChange, onCreate }: any) {
   const selected = products.find((p: any) => p.id === value)
 
   async function handleCreate() {
-    if (!newProduct.name || !newProduct.price) return
-    setSaving(true)
+    if (!newProduct.name || !newProduct.price) return.current = true(true)
     const created = await onCreate(newProduct)
     if (created) {
       onChange(created.id, parseFloat(newProduct.price), created.name)
@@ -353,6 +351,7 @@ export default function NouvelleFacturePage() {
   const [settings, setSettings] = useState<any>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const billSaveLock = useRef(false)
 
   // ===== INVOICE STATE =====
   const [clientId, setClientId] = useState<string>('')
@@ -433,18 +432,19 @@ export default function NouvelleFacturePage() {
     if (created) setProducts([...products, created])
     return created
   }
-
   // ===== SAVE =====
   async function saveBill() {
+    if (billSaveLock.current) return
     setError('')
-    if (!clientId) { setError('Sélectionnez un client'); return }
+    if (!clientId) { setError('Selectionnez un client'); return }
     const validItems = items.filter(i => i.product_id && i.quantity > 0)
     if (validItems.length === 0) { setError('Ajoutez au moins une ligne'); return }
-    
+
+    billSaveLock.current = true
     setSaving(true)
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}')
-      
+
       const { data: newBill, error: billErr } = await supabase.from('bills').insert({
         client_id: clientId,
         order_number: orderNumber || null,
@@ -462,9 +462,9 @@ export default function NouvelleFacturePage() {
         created_by: user.id,
         company_id: user.company_id,
       }).select().single()
-      
+
       if (billErr) throw billErr
-      if (!newBill) throw new Error('Facture non créée')
+      if (!newBill) throw new Error('Facture non creee')
 
       const { error: itemsErr } = await supabase.from('bill_items').insert(
         validItems.map(i => ({
@@ -480,16 +480,17 @@ export default function NouvelleFacturePage() {
           company_id: user.company_id,
         }))
       )
-      
+
       if (itemsErr) throw itemsErr
-      
+
       router.push(`/${slug}/dashboard/factures`)
     } catch (e: any) {
-      setError(e.message || 'Erreur lors de la création')
+      setError(e.message || 'Erreur lors de la creation')
+    } finally {
+      setSaving(false)
+      billSaveLock.current = false
     }
-    setSaving(false)
   }
-
   return (
     <div style={{
       minHeight: '100vh', background: COLORS.bg,
@@ -803,3 +804,5 @@ export default function NouvelleFacturePage() {
     </div>
   )
 }
+
+
