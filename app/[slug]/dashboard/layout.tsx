@@ -143,9 +143,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (el.dataset.uiOverlay === 'mobile-nav') continue
       const bg = el.style.background || ''
       if (!bg.includes('rgba(0,0,0')) continue
-      const z = Number(el.style.zIndex || '0')
-      if (Number.isNaN(z) || z >= 5000) continue
-      if (el.onclick) continue
       el.remove()
     }
   }
@@ -185,11 +182,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     setOpen(false)
     cleanupStaleBackdrops()
+    const t1 = setTimeout(cleanupStaleBackdrops, 120)
+    const t2 = setTimeout(cleanupStaleBackdrops, 500)
+    const t3 = setTimeout(cleanupStaleBackdrops, 1200)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+    }
   }, [pathname])
 
   useEffect(() => {
     if (!isMobile) setOpen(false)
   }, [isMobile])
+
+  useEffect(() => {
+    const onFocus = () => cleanupStaleBackdrops()
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('pageshow', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('pageshow', onFocus)
+    }
+  }, [])
 
   async function fetchSettings(companyId?: string) {
     if (!companyId) return

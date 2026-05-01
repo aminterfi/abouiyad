@@ -9,26 +9,37 @@ export default function SlugLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const [loading, setLoading] = useState(true)
 
+  function cleanupStaleBackdrops() {
+    if (typeof document === 'undefined') return
+    document.body.style.overflow = ''
+    const overlays = Array.from(document.querySelectorAll('div[style*="position: fixed"][style*="inset: 0"]'))
+    for (const node of overlays) {
+      const el = node as HTMLDivElement
+      if (el.dataset.uiOverlay === 'mobile-nav') continue
+      const bg = el.style.background || ''
+      if (!bg.includes('rgba(0,0,0')) continue
+      el.remove()
+    }
+  }
+
   useEffect(() => {
     async function validate() {
-      // 1. Vérifier que l'entreprise existe
+      cleanupStaleBackdrops()
+
       const { data: company } = await supabase.rpc('get_company_by_slug', { p_slug: slug })
       if (!company) {
         router.push('/')
         return
       }
 
-      // 2. Page login du slug : accessible sans user
       const isLoginPage = pathname === `/${slug}`
       if (isLoginPage) {
         setLoading(false)
         return
       }
 
-      // 3. Attendre un peu pour laisser le temps au localStorage
       await new Promise(r => setTimeout(r, 150))
 
-      // 4. Vérifier user
       const u = localStorage.getItem('user')
       if (!u) {
         router.push(`/${slug}`)
@@ -36,8 +47,6 @@ export default function SlugLayout({ children }: { children: React.ReactNode }) 
       }
 
       const parsed = JSON.parse(u)
-
-      // 5. Vérifier que le user appartient à cette entreprise
       if (parsed.company_id !== company.id && !parsed.is_platform_admin) {
         if (parsed.slug && parsed.slug !== slug) {
           router.push(`/${parsed.slug}/dashboard`)
@@ -51,9 +60,21 @@ export default function SlugLayout({ children }: { children: React.ReactNode }) 
       setLoading(false)
     }
     validate()
-  }, [slug, pathname])
+  }, [slug, pathname, router])
 
-  if (loading) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f5f4f1',color:'#a8a69e',fontFamily:'Outfit,sans-serif'}}>Chargement...</div>
+  useEffect(() => {
+    cleanupStaleBackdrops()
+    const t = setTimeout(cleanupStaleBackdrops, 300)
+    return () => clearTimeout(t)
+  }, [pathname])
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f4f1', color: '#a8a69e', fontFamily: 'Outfit,sans-serif' }}>
+        Chargement...
+      </div>
+    )
+  }
 
   return <>{children}</>
 }
