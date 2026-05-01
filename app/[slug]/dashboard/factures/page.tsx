@@ -615,6 +615,7 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
   const totalTTC = totalHT + tva
 
   async function saveBill() {
+    if (saving) return
     setError('')
     if (!form.client_id) { setError('Sélectionnez un client'); return }
     if (form.items.length === 0 || form.items.every((i:any) => !i.product_id)) { setError('Ajoutez au moins un produit'); return }
@@ -630,10 +631,11 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
       if (newBill) {
         const validItems = form.items.filter((i:any) => i.product_id && i.qty > 0)
         if (validItems.length > 0) {
-          await supabase.from('bill_items').insert(validItems.map((i:any) => ({
+          const { error: itemsErr } = await supabase.from('bill_items').insert(validItems.map((i:any) => ({
             bill_id: newBill.id, product_id: i.product_id, quantity: i.qty,
-            unit_price: i.price, company_id: user.company_id
+            unit_price: i.price, total: i.qty * i.price, created_by: user.id, company_id: user.company_id
           })))
+          if (itemsErr) throw itemsErr
         }
       }
       setForm({ client_id:'', note:'', date_due:'', items:[{ product_id:'', qty:1, price:0 }] })
