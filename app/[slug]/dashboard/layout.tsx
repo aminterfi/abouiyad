@@ -299,7 +299,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const companyName = settings.company_name || user.company_name || 'RSS'
 
   const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => (
-    <div style={{width:inDrawer?240:sidebarWidth,background:'#1a1916',display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',transition:'width .25s ease'}}>
+    <div style={{width:inDrawer?240:sidebarWidth,background:'#1a1916',display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',transition:'width .34s cubic-bezier(0.22,1,0.36,1)'}}>
       <CompanySwitcher 
         slug={slug} 
         companyName={companyName} 
@@ -313,8 +313,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (items.length === 0) return null
           return (
             <div key={section}>
-              {(sidebarIsExpanded || inDrawer) && <div style={{fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'.7px',padding:'8px 8px 4px'}}>{section}</div>}
-              {(!sidebarIsExpanded && !inDrawer) && <div style={{height:12}}/>}
+              <div style={{fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'.7px',padding:'8px 8px 4px',opacity:(sidebarIsExpanded || inDrawer)?1:0,maxHeight:(sidebarIsExpanded || inDrawer)?24:0,overflow:'hidden',transform:(sidebarIsExpanded || inDrawer)?'translateX(0)':'translateX(-6px)',transition:'opacity .2s ease, max-height .22s ease, transform .2s ease'}}>{section}</div>
               {items.map(item => {
                 const Icon = item.icon
                 const active = pathname === item.href
@@ -324,7 +323,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <Link key={item.href} href={item.href} onClick={handleNavClick}
                     style={{display:'flex',alignItems:'center',gap:showCollapsed?0:10,padding:showCollapsed?'10px':'9px 10px',justifyContent:showCollapsed?'center':'flex-start',borderRadius:7,marginBottom:2,fontSize:13,fontWeight:active?500:400,color:active?'#fff':(isPlatformItem?'#a78bfa':'rgba(255,255,255,0.5)'),background:active?(isPlatformItem?'rgba(124,58,237,0.3)':'rgba(37,99,235,0.3)'):'transparent',textDecoration:'none',transition:'all .15s'}}>
                     <span style={{opacity:active?1:0.6,flexShrink:0,display:'flex'}}><Icon/></span>
-                    {(!showCollapsed) && <span style={{whiteSpace:'nowrap'}}>{item.label}</span>}
+                    <span style={{whiteSpace:'nowrap',opacity:showCollapsed?0:1,maxWidth:showCollapsed?0:140,overflow:'hidden',transform:showCollapsed?'translateX(-4px)':'translateX(0)',transition:'opacity .2s ease, max-width .24s ease, transform .2s ease'}}>{item.label}</span>
                   </Link>
                 )
               })}
@@ -336,19 +335,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {!inDrawer && (
         <button onClick={toggleCollapsed} style={{background:'rgba(255,255,255,0.05)',border:'none',cursor:'pointer',padding:8,color:'rgba(255,255,255,0.5)',borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontSize:11,fontFamily:'inherit'}}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{transform:collapsed?'rotate(180deg)':'none',transition:'.2s'}}><polyline points="15 18 9 12 15 6"/></svg>
-          {sidebarIsExpanded && 'Réduire'}
+          <span style={{whiteSpace:'nowrap',opacity:sidebarIsExpanded?1:0,maxWidth:sidebarIsExpanded?80:0,overflow:'hidden',transform:sidebarIsExpanded?'translateX(0)':'translateX(-4px)',transition:'opacity .2s ease, max-width .24s ease, transform .2s ease'}}>Réduire</span>
         </button>
       )}
 
       <div onClick={() => router.push(`/${slug}/dashboard/profil`)}
         style={{padding:(!sidebarIsExpanded && !inDrawer)?'10px':12,borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:(!sidebarIsExpanded && !inDrawer)?'center':'flex-start',gap:9,cursor:'pointer',flexShrink:0}}>
         <div style={{width:32,height:32,borderRadius:'50%',background:isPlatformAdmin?'linear-gradient(135deg,#7c3aed,#5B3DF5)':'#2563EB',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0}}>{initials}</div>
-        {(sidebarIsExpanded || inDrawer) && (
-          <div style={{minWidth:0}}>
+        <div style={{minWidth:0,opacity:(sidebarIsExpanded || inDrawer)?1:0,maxWidth:(sidebarIsExpanded || inDrawer)?160:0,overflow:'hidden',transform:(sidebarIsExpanded || inDrawer)?'translateX(0)':'translateX(-4px)',transition:'opacity .2s ease, max-width .24s ease, transform .2s ease'}}>
             <div style={{fontSize:12,fontWeight:500,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user.full_name}</div>
             <div style={{fontSize:10,color:isPlatformAdmin?'#a78bfa':'rgba(255,255,255,0.35)'}}>{isPlatformAdmin?'👑 Super Admin RS':user.role}</div>
           </div>
-        )}
       </div>
     </div>
   )
