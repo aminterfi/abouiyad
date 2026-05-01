@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { detectWorkspaceType, getDefaultWorkspacePath, normalizeWorkspaceSession, writeWorkspaceSession } from '@/lib/workspace'
 
 export default function HubPage() {
   const router = useRouter()
@@ -20,9 +21,9 @@ export default function HubPage() {
       router.push('/')
       return
     }
-    const parsed = JSON.parse(u)
+    const parsed = normalizeWorkspaceSession(JSON.parse(u))
     setUser(parsed)
-    loadCompanies(parsed.id)
+    if (parsed.id) loadCompanies(parsed.id)
   }, [])
 
   async function loadCompanies(userId: string) {
@@ -39,14 +40,18 @@ export default function HubPage() {
 
   function enterCompany(c: any) {
     // Mettre à jour le user dans localStorage avec la nouvelle entreprise sélectionnée
-    const updatedUser = {
+    const updatedUser = normalizeWorkspaceSession({
       ...user,
       company_id: c.company_id,
       company_name: c.company_name,
       slug: c.slug,
-    }
-    localStorage.setItem('user', JSON.stringify(updatedUser))
-    window.location.href = `/${c.slug}/dashboard`
+      workspace_type: detectWorkspaceType(c),
+      parent_cabinet_id: c.parent_cabinet_id || null,
+      active_company_id: c.company_id,
+      active_slug: c.slug,
+    })
+    writeWorkspaceSession(updatedUser)
+    window.location.href = getDefaultWorkspacePath(updatedUser, c.slug)
   }
 
   async function handleCreate() {

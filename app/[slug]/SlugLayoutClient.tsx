@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getDefaultWorkspacePath, getLegacyDashboardRedirect, normalizeWorkspaceSession } from '@/lib/workspace'
 
 export default function SlugLayoutClient({ slug, children }: { slug: string; children: React.ReactNode }) {
   const router = useRouter()
@@ -46,14 +47,40 @@ export default function SlugLayoutClient({ slug, children }: { slug: string; chi
         return
       }
 
-      const parsed = JSON.parse(u)
+      const parsed = normalizeWorkspaceSession(JSON.parse(u))
       if (parsed.company_id !== company.id && !parsed.is_platform_admin) {
         if (parsed.slug && parsed.slug !== slug) {
-          router.push(`/${parsed.slug}/dashboard`)
+          router.push(getDefaultWorkspacePath(parsed, parsed.slug))
         } else {
           localStorage.removeItem('user')
           router.push(`/${slug}`)
         }
+        return
+      }
+
+      const isAdminRsPath = pathname.startsWith(`/${slug}/admin-rs`)
+      const isCabinetPath = pathname.startsWith(`/${slug}/cabinet`)
+      const isClientPath = pathname.startsWith(`/${slug}/client`)
+      const isLegacyDashboardPath = pathname.startsWith(`/${slug}/dashboard`)
+
+      if (isAdminRsPath && !parsed.is_platform_admin) {
+        router.replace(getDefaultWorkspacePath(parsed, slug))
+        return
+      }
+
+      if (isCabinetPath && !parsed.is_platform_admin && parsed.workspace_type !== 'cabinet') {
+        router.replace(getDefaultWorkspacePath(parsed, slug))
+        return
+      }
+
+      if (isClientPath && !parsed.is_platform_admin && parsed.workspace_type !== 'client') {
+        router.replace(getDefaultWorkspacePath(parsed, slug))
+        return
+      }
+
+      if (isLegacyDashboardPath) {
+        const suffix = pathname.replace(`/${slug}/dashboard`, '').split('/').filter(Boolean)
+        router.replace(getLegacyDashboardRedirect(slug, suffix, parsed.workspace_type, parsed.is_platform_admin))
         return
       }
 
@@ -78,4 +105,3 @@ export default function SlugLayoutClient({ slug, children }: { slug: string; chi
 
   return <>{children}</>
 }
-

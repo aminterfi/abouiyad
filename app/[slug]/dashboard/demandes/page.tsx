@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { usePathname } from 'next/navigation'
+import { loadOperationalScope } from '@/lib/workspace-client'
 
 const card: React.CSSProperties = { background:'#fff', border:'1px solid rgba(0,0,0,0.08)', borderRadius:10, padding:16 }
 const inp: React.CSSProperties = { width:'100%', padding:'10px 12px', border:'1px solid rgba(0,0,0,0.14)', borderRadius:7, background:'#f8f7f5', fontFamily:'inherit' }
@@ -55,7 +57,9 @@ function ProgressLine({ status }: { status: string }) {
 }
 
 export default function DemandesPage() {
+  const pathname = usePathname()
   const [rows, setRows] = useState<any[]>([])
+  const [managedCompanies, setManagedCompanies] = useState<any[]>([])
   const [requestType, setRequestType] = useState('g12')
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
@@ -64,17 +68,22 @@ export default function DemandesPage() {
   const [error, setError] = useState('')
   const [user, setUser] = useState<any>(null)
 
-  const canManage = ['owner', 'superadmin', 'admin', 'employe'].includes(user?.role)
+  const [mode, setMode] = useState<'client' | 'cabinet'>('client')
+  const canManage = mode === 'cabinet' || user?.is_platform_admin === true
 
   async function load() {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
     setUser(currentUser)
     if (!currentUser.company_id) return
 
+    const scope = await loadOperationalScope(currentUser.company_id, pathname)
+    setMode(scope.mode)
+    setManagedCompanies(scope.companies)
+
     const { data, error: err } = await supabase
       .from('service_requests')
       .select('*')
-      .eq('company_id', currentUser.company_id)
+      .in('company_id', scope.companyIds)
       .order('created_at', { ascending: false })
 
     if (err) {
@@ -85,7 +94,7 @@ export default function DemandesPage() {
     setRows(data || [])
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [pathname])
 
   async function createRequest() {
     setError('')
@@ -138,6 +147,7 @@ export default function DemandesPage() {
   }
 
   const filtered = rows.filter((row) => filter === 'all' || row.status === filter)
+  const companyLookup = Object.fromEntries(managedCompanies.map((company: any) => [company.id, company]))
   const counts = {
     total: rows.length,
     pending: rows.filter(r => r.status === 'pending').length,
@@ -247,6 +257,11 @@ export default function DemandesPage() {
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
                       <div style={{ fontWeight:700 }}>{row.title}</div>
                       {statusBadge(row.status)}
+                      {mode === 'cabinet' && row.company_id && companyLookup[row.company_id]?.name && (
+                        <span style={{ fontSize:11, fontWeight:700, color:'#2563EB', background:'rgba(37,99,235,0.10)', borderRadius:999, padding:'4px 9px' }}>
+                          {companyLookup[row.company_id].name}
+                        </span>
+                      )}
                       {row.requires_generated_document && (
                         <span style={{ fontSize:11, fontWeight:700, color:'#7c3aed', background:'rgba(124,58,237,0.12)', borderRadius:999, padding:'4px 9px' }}>
                           Auto-doc

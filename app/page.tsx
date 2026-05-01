@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { detectWorkspaceType, getDefaultWorkspacePath, normalizeWorkspaceSession, writeWorkspaceSession } from '@/lib/workspace'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
@@ -15,7 +16,7 @@ export default function LoginPage() {
   useEffect(() => {
     const u = localStorage.getItem('user')
     if (u) {
-      const parsed = JSON.parse(u)
+      const parsed = normalizeWorkspaceSession(JSON.parse(u))
       // Si plusieurs entreprises → hub
       if (parsed.nb_companies && parsed.nb_companies > 1) {
         window.location.href = '/hub'
@@ -23,7 +24,7 @@ export default function LoginPage() {
       }
       // Sinon → dashboard de l'entreprise
       if (parsed.slug) {
-        window.location.href = `/${parsed.slug}/dashboard`
+        window.location.href = getDefaultWorkspacePath(parsed)
         return
       }
     }
@@ -63,6 +64,7 @@ export default function LoginPage() {
 
       // Choisir l'entreprise primary par défaut
       const primary = companies.find((c: any) => c.is_primary) || companies[0]
+      const workspaceType = detectWorkspaceType(primary)
 
       const userData = {
         id: auth.user!.id,
@@ -75,6 +77,11 @@ export default function LoginPage() {
         type: 'owner',
         slug: primary.slug,
         nb_companies: companies.length,
+        workspace_type: workspaceType,
+        workspace_role: 'owner',
+        parent_cabinet_id: primary.parent_cabinet_id || null,
+        active_company_id: primary.company_id,
+        active_slug: primary.slug,
       }
 
       // Récupérer le full_name depuis owners
@@ -83,7 +90,7 @@ export default function LoginPage() {
         userData.full_name = ownerInfo[0].full_name
       }
 
-      localStorage.setItem('user', JSON.stringify(userData))
+      writeWorkspaceSession(userData)
       localStorage.setItem('owner_companies', JSON.stringify(companies))
       if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
 
@@ -91,7 +98,7 @@ export default function LoginPage() {
       if (companies.length > 1) {
         window.location.href = '/hub'
       } else {
-        window.location.href = `/${primary.slug}/dashboard`
+        window.location.href = getDefaultWorkspacePath(userData, primary.slug)
       }
     } catch (err: any) {
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : err.message)

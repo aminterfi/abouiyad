@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import { detectWorkspaceType, getDefaultWorkspacePath, normalizeWorkspaceSession, writeWorkspaceSession } from '@/lib/workspace'
 
 export default function SlugHomePage() {
   const { slug } = useParams() as { slug: string }
@@ -27,7 +28,7 @@ export default function SlugHomePage() {
 
       const u = localStorage.getItem('user')
       if (u) {
-        const parsed = JSON.parse(u)
+        const parsed = normalizeWorkspaceSession(JSON.parse(u))
         if (parsed.company_id === data.id || parsed.is_platform_admin) {
           setUser(parsed)
         }
@@ -61,10 +62,15 @@ export default function SlugHomePage() {
         id: auth.user!.id, email: auth.user!.email, full_name: owner.full_name,
         role: 'owner', company_id: owner.company_id, company_name: owner.company_name,
         is_platform_admin: owner.is_platform_admin, type: 'owner', slug,
+        workspace_type: detectWorkspaceType(company),
+        workspace_role: 'owner',
+        parent_cabinet_id: company?.parent_cabinet_id || null,
+        active_company_id: owner.company_id,
+        active_slug: slug,
       }
-      localStorage.setItem('user', JSON.stringify(userData))
+      writeWorkspaceSession(userData)
       if (sub) localStorage.setItem('subscription', JSON.stringify(sub))
-      window.location.href = `/${slug}/dashboard`
+      window.location.href = getDefaultWorkspacePath(userData, slug)
       return
     } catch (err: any) {
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : err.message)
@@ -83,9 +89,17 @@ export default function SlugHomePage() {
         p_username: username.trim(), p_password: password, p_company_id: company.id,
       })
       if (!data) throw new Error('Identifiants incorrects')
-      const userData = { ...data, type: 'employee', slug }
-      localStorage.setItem('user', JSON.stringify(userData))
-      window.location.href = `/${slug}/dashboard`
+      const userData = normalizeWorkspaceSession({
+        ...data,
+        type: 'employee',
+        slug,
+        workspace_type: detectWorkspaceType(company),
+        parent_cabinet_id: company?.parent_cabinet_id || null,
+        active_company_id: data.company_id || company.id,
+        active_slug: slug,
+      })
+      writeWorkspaceSession(userData)
+      window.location.href = getDefaultWorkspacePath(userData, slug)
       return
     } catch (err: any) { setError(err.message) }
     setLoading(false)
@@ -106,6 +120,7 @@ export default function SlugHomePage() {
   if (user) {
     const isOwner = user.type === 'owner' || user.role === 'owner' || user.role === 'superadmin' || user.role === 'admin'
     const isAdmin = isOwner || user.role === 'admin'
+    const shellRoot = getDefaultWorkspacePath(user, slug)
 
     const MODULES = [
       { label:'Tableau de bord', href:`/${slug}/dashboard`, icon:'📊', color:'#2563EB', roles:['all'] },

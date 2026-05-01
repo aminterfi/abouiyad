@@ -21,6 +21,14 @@ export default function AdminPlatform() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    company_name: '',
+    slug: '',
+    owner_email: '',
+    owner_full_name: '',
+  })
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('user') || '{}')
@@ -55,6 +63,28 @@ export default function AdminPlatform() {
     return true
   })
 
+  async function createManagedWorkspace() {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!currentUser.company_id) return
+    setCreating(true)
+    const { error } = await supabase.rpc('admin_create_managed_client_workspace', {
+      p_company_name: createForm.company_name.trim(),
+      p_slug: createForm.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      p_owner_email: createForm.owner_email.trim().toLowerCase(),
+      p_owner_full_name: createForm.owner_full_name.trim(),
+      p_parent_cabinet_id: currentUser.company_id,
+    })
+    if (error) {
+      alert(error.message)
+      setCreating(false)
+      return
+    }
+    setCreateForm({ company_name: '', slug: '', owner_email: '', owner_full_name: '' })
+    setShowCreate(false)
+    setCreating(false)
+    load()
+  }
+
   function getDaysLeft(c: any): string {
     if (c.subscription_status === 'trial' && c.trial_end) {
       const days = Math.ceil((new Date(c.trial_end).getTime() - Date.now()) / 86400000)
@@ -77,6 +107,10 @@ export default function AdminPlatform() {
           </div>
           <div style={{fontSize:12,color:'#a8a69e',marginTop:4}}>Gestion complète de toutes les entreprises clients</div>
         </div>
+        <button onClick={() => setShowCreate(true)}
+          style={{padding:'10px 14px',fontSize:12,fontWeight:700,background:'#2563EB',color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>
+          Nouveau client gere
+        </button>
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:12,marginBottom:18}}>
@@ -161,6 +195,49 @@ export default function AdminPlatform() {
           </tbody>
         </table>
       </div>
+
+      {showCreate && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,zIndex:200}}
+          onClick={() => setShowCreate(false)}>
+          <div style={{background:'#fff',borderRadius:12,padding:22,width:'100%',maxWidth:520}}
+            onClick={(event) => event.stopPropagation()}>
+            <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>Nouveau client gere</div>
+            <div style={{fontSize:12,color:'#6b6860',marginBottom:18}}>Creer un workspace client rattache au cabinet courant.</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div style={{gridColumn:'1 / -1'}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b6860',marginBottom:6}}>Nom du client</div>
+                <input value={createForm.company_name} onChange={e=>setCreateForm({...createForm, company_name:e.target.value})}
+                  style={{width:'100%',padding:'10px 12px',border:'1px solid rgba(0,0,0,0.12)',borderRadius:8,fontFamily:'inherit'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b6860',marginBottom:6}}>Slug</div>
+                <input value={createForm.slug} onChange={e=>setCreateForm({...createForm, slug:e.target.value})}
+                  style={{width:'100%',padding:'10px 12px',border:'1px solid rgba(0,0,0,0.12)',borderRadius:8,fontFamily:'inherit'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b6860',marginBottom:6}}>Email owner</div>
+                <input value={createForm.owner_email} onChange={e=>setCreateForm({...createForm, owner_email:e.target.value})}
+                  style={{width:'100%',padding:'10px 12px',border:'1px solid rgba(0,0,0,0.12)',borderRadius:8,fontFamily:'inherit'}}/>
+              </div>
+              <div style={{gridColumn:'1 / -1'}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b6860',marginBottom:6}}>Nom complet owner</div>
+                <input value={createForm.owner_full_name} onChange={e=>setCreateForm({...createForm, owner_full_name:e.target.value})}
+                  style={{width:'100%',padding:'10px 12px',border:'1px solid rgba(0,0,0,0.12)',borderRadius:8,fontFamily:'inherit'}}/>
+              </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:18}}>
+              <button onClick={() => setShowCreate(false)}
+                style={{padding:'10px 14px',fontSize:12,fontWeight:600,background:'#fff',color:'#6b6860',border:'1px solid rgba(0,0,0,0.12)',borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>
+                Annuler
+              </button>
+              <button onClick={createManagedWorkspace} disabled={creating}
+                style={{padding:'10px 14px',fontSize:12,fontWeight:700,background:'#2563EB',color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>
+                {creating ? 'Creation...' : 'Creer le workspace'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -19,6 +19,8 @@ export default function CompanyDetailPage() {
   const [ownerForm, setOwnerForm] = useState({email:'', full_name:''})
   const [extendDays, setExtendDays] = useState(30)
   const [activatePlan, setActivatePlan] = useState({plan:'pro', price:'2000', months:12})
+  const [workspaceForm, setWorkspaceForm] = useState({ workspace_type: 'cabinet', parent_cabinet_id: '' })
+  const [modules, setModules] = useState<string[]>([])
 
   useEffect(()=>{
     const u = JSON.parse(localStorage.getItem('user') || '{}')
@@ -40,10 +42,19 @@ export default function CompanyDetailPage() {
       logo_url: result.settings?.logo_url||'',
       primary_color: result.settings?.primary_color||'#2563EB'
     })
+    if (result?.company) setWorkspaceForm({
+      workspace_type: result.company.workspace_type || 'cabinet',
+      parent_cabinet_id: result.company.parent_cabinet_id || '',
+    })
     if (result?.owner) setOwnerForm({
       email: result.owner.email||'',
       full_name: result.owner.full_name||''
     })
+    const { data: accessRows } = await supabase
+      .from('company_module_access')
+      .select('module_key,is_enabled')
+      .eq('company_id', companyId)
+    setModules((accessRows || []).filter((row: any) => row.is_enabled !== false).map((row: any) => row.module_key))
     setLoading(false)
   }
 
@@ -78,6 +89,38 @@ export default function CompanyDetailPage() {
     if(error){flash(error.message,true);setSaving(false);return}
     flash('✅ Owner mis à jour (email côté auth à modifier manuellement si nécessaire)')
     load()
+    setSaving(false)
+  }
+
+  async function saveWorkspace() {
+    setSaving(true)
+    const { error } = await supabase.rpc('admin_update_company_workspace', {
+      p_company_id: companyId,
+      p_workspace_type: workspaceForm.workspace_type,
+      p_parent_cabinet_id: workspaceForm.workspace_type === 'client' ? (workspaceForm.parent_cabinet_id || null) : null,
+    })
+    if (error) {
+      flash(error.message, true)
+      setSaving(false)
+      return
+    }
+    flash('Espace mis a jour')
+    load()
+    setSaving(false)
+  }
+
+  async function saveModules() {
+    setSaving(true)
+    const { error } = await supabase.rpc('admin_set_company_module_access', {
+      p_company_id: companyId,
+      p_modules: modules,
+    })
+    if (error) {
+      flash(error.message, true)
+      setSaving(false)
+      return
+    }
+    flash('Modules mis a jour')
     setSaving(false)
   }
 
@@ -153,6 +196,7 @@ export default function CompanyDetailPage() {
   const lbl:React.CSSProperties = {fontSize:11,color:'#6b6860',marginBottom:5,fontWeight:500,display:'block'}
   const card:React.CSSProperties = {background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:20,marginBottom:14}
   const sectionTitle:React.CSSProperties = {fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:14,display:'flex',alignItems:'center',gap:8}
+  const moduleOptions = ['dashboard','billing','clients','payments','catalog','stock','tickets','service_requests','documents','users','settings']
 
   return (
     <div>
@@ -247,6 +291,63 @@ export default function CompanyDetailPage() {
             🔑 Reset password
           </button>
         </div>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>Structure workspace</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+          <div>
+            <label style={lbl}>Type de workspace</label>
+            <select
+              style={inp}
+              value={workspaceForm.workspace_type}
+              onChange={e=>setWorkspaceForm({...workspaceForm,workspace_type:e.target.value})}
+            >
+              <option value="cabinet">Cabinet</option>
+              <option value="client">Client</option>
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Cabinet parent</label>
+            <input
+              style={inp}
+              value={workspaceForm.parent_cabinet_id}
+              onChange={e=>setWorkspaceForm({...workspaceForm,parent_cabinet_id:e.target.value})}
+              placeholder="UUID du cabinet parent"
+              disabled={workspaceForm.workspace_type !== 'client'}
+            />
+          </div>
+        </div>
+        <button onClick={saveWorkspace} disabled={saving}
+          style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#1a1916',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
+          Enregistrer la structure
+        </button>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>Modules client</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10,marginBottom:14}}>
+          {moduleOptions.map((moduleKey) => {
+            const active = modules.includes(moduleKey)
+            return (
+              <label key={moduleKey} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer',padding:'10px 12px',border:'1px solid rgba(0,0,0,0.08)',borderRadius:8,background:active?'rgba(37,99,235,0.06)':'#fff'}}>
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => {
+                    if (e.target.checked) setModules((prev) => Array.from(new Set([...prev, moduleKey])))
+                    else setModules((prev) => prev.filter((item) => item !== moduleKey))
+                  }}
+                />
+                <span>{moduleKey}</span>
+              </label>
+            )
+          })}
+        </div>
+        <button onClick={saveModules} disabled={saving}
+          style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#2563EB',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
+          Enregistrer les modules
+        </button>
       </div>
 
       {/* SUBSCRIPTION */}
