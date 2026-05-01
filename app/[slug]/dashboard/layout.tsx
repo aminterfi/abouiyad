@@ -133,6 +133,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
 
+  function cleanupStaleBackdrops() {
+    if (typeof document === 'undefined') return
+    document.body.style.overflow = ''
+
+    const overlays = Array.from(document.querySelectorAll('div[style*="position: fixed"][style*="inset: 0"]'))
+    for (const node of overlays) {
+      const el = node as HTMLDivElement
+      if (el.dataset.uiOverlay === 'mobile-nav') continue
+      const bg = el.style.background || ''
+      if (!bg.includes('rgba(0,0,0')) continue
+      const z = Number(el.style.zIndex || '0')
+      if (Number.isNaN(z) || z >= 5000) continue
+      if (el.onclick) continue
+      el.remove()
+    }
+  }
+
   const ALL_NAV = [
     { label: 'Tableau de bord', href: `/${slug}/dashboard`, section: 'Général', icon: DashIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
     { label: 'Factures', href: `/${slug}/dashboard/factures`, section: 'Gestion', icon: BillIcon, roles: ['superadmin','admin','employe','lecteur','owner'], platformAdminOnly: false },
@@ -164,6 +181,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
+  useEffect(() => {
+    setOpen(false)
+    cleanupStaleBackdrops()
+  }, [pathname])
+
+  useEffect(() => {
+    if (!isMobile) setOpen(false)
+  }, [isMobile])
 
   async function fetchSettings(companyId?: string) {
     if (!companyId) return
@@ -267,7 +293,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:'#f5f4f1'}}>
       {!isMobile && <div style={{flexShrink:0}}><Sidebar/></div>}
-      {isMobile && open && <div onClick={() => setOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:99}}/>}
+      {isMobile && open && <div data-ui-overlay="mobile-nav" onClick={() => setOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:99}}/>}
       {isMobile && (
         <div style={{position:'fixed',top:0,left:0,height:'100%',zIndex:100,transform:open?'translateX(0)':'translateX(-100%)',transition:'transform .3s ease',width:240}}>
           <Sidebar inDrawer/>
