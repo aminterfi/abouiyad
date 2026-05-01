@@ -352,7 +352,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const NAV = ALL_NAV.filter(n => {
     if (n.platformAdminOnly && !isPlatformAdmin) return false
-    if (enabledModules && n.moduleKey && !enabledModules.includes(String(n.moduleKey).toLowerCase())) return false
+    if (!n.platformAdminOnly && enabledModules && n.moduleKey && !enabledModules.includes(String(n.moduleKey).toLowerCase())) return false
     return n.roles.includes(user.role)
   })
   
