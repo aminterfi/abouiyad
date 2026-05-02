@@ -74,6 +74,22 @@ function folderLabel(year: number) {
   return `Annee d'exercice ${year}`
 }
 
+function normalizeFolder(row: any): ArchiveFolder {
+  const year = Number(row?.exercise_year || new Date().getFullYear())
+  const kind = row?.folder_kind === 'folder' ? 'folder' : 'exercise'
+
+  return {
+    id: String(row?.id || ''),
+    company_id: String(row?.company_id || ''),
+    exercise_year: year,
+    created_at: row?.created_at || new Date().toISOString(),
+    updated_at: row?.updated_at || null,
+    parent_folder_id: row?.parent_folder_id || null,
+    folder_name: String(row?.folder_name || folderLabel(year)),
+    folder_kind: kind,
+  }
+}
+
 function buildStoragePath(companyId: string, folderId: string, fileName: string) {
   const safeName = fileName
     .toLowerCase()
@@ -167,7 +183,7 @@ export default function DocumentsPage() {
   const [uploadDescription, setUploadDescription] = useState('')
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([])
 
-  async function load() {
+  async function load(companyOverride?: string) {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
     setUser(currentUser)
     if (!currentUser.company_id) {
@@ -183,9 +199,10 @@ export default function DocumentsPage() {
       setMode(scope.mode)
       setManagedCompanies(scope.companies)
 
-      const companyId = scope.mode === 'cabinet'
+      const companyId = companyOverride || (scope.mode === 'cabinet'
         ? (activeCompanyId || scope.companies[0]?.id || '')
         : currentUser.company_id
+      )
 
       setActiveCompanyId(companyId)
 
@@ -214,7 +231,7 @@ export default function DocumentsPage() {
         throw new Error('Module archives documents non initialise dans la base.')
       }
 
-      const nextFolders = (folderRows || []) as ArchiveFolder[]
+      const nextFolders = (folderRows || []).map(normalizeFolder) as ArchiveFolder[]
       const nextFiles = await withSignedUrls((fileRows || []) as ArchiveFile[])
 
       setFolders(nextFolders)
@@ -240,7 +257,8 @@ export default function DocumentsPage() {
   useEffect(() => {
     if (!user?.company_id) return
     if (mode !== 'cabinet') return
-    load()
+    if (!activeCompanyId) return
+    load(activeCompanyId)
   }, [activeCompanyId])
 
   const companyLookup = useMemo(
@@ -319,6 +337,12 @@ export default function DocumentsPage() {
     setQueuedFiles((current) => current.filter((item) => item.key !== key))
   }
 
+  function handleCompanyChange(companyId: string) {
+    setActiveCompanyId(companyId)
+    setSelectedFolderId('')
+    setError('')
+  }
+
   async function createExerciseFolder() {
     if (mode !== 'cabinet') return
     if (!activeCompanyId) {
@@ -330,20 +354,33 @@ export default function DocumentsPage() {
     setError('')
 
     try {
-      const { error: insertError } = await supabase.from('document_exercise_folders').insert({
+      let insertError: any = null
+      const rootPayload = {
         company_id: activeCompanyId,
         exercise_year: exerciseYear,
         folder_name: folderLabel(exerciseYear),
         folder_kind: 'exercise',
         parent_folder_id: null,
         created_by: user.id,
-      })
+      }
+
+      const rootInsert = await supabase.from('document_exercise_folders').insert(rootPayload)
+      insertError = rootInsert.error
+
+      if (insertError?.message?.includes('parent_folder_id') || insertError?.message?.includes('folder_name') || insertError?.message?.includes('folder_kind')) {
+        const legacyInsert = await supabase.from('document_exercise_folders').insert({
+          company_id: activeCompanyId,
+          exercise_year: exerciseYear,
+          created_by: user.id,
+        })
+        insertError = legacyInsert.error
+      }
 
       if (insertError) {
         throw new Error('Impossible de creer ce dossier d exercice. Verifiez si cette annee existe deja.')
       }
 
-      await load()
+      await load(activeCompanyId)
     } catch (err: any) {
       setError(err?.message || 'Impossible de creer le dossier.')
     } finally {
@@ -378,11 +415,18 @@ export default function DocumentsPage() {
       })
 
       if (insertError) {
+        if (
+          insertError.message?.includes('parent_folder_id') ||
+          insertError.message?.includes('folder_name') ||
+          insertError.message?.includes('folder_kind')
+        ) {
+          throw new Error("Le support des sous-dossiers n'est pas encore present dans Supabase. Appliquez la migration nested folders.")
+        }
         throw new Error('Impossible de creer ce sous-dossier.')
       }
 
       setSubfolderName('')
-      await load()
+      await load(selectedFolder.company_id)
     } catch (err: any) {
       setError(err?.message || 'Impossible de creer le sous-dossier.')
     } finally {
@@ -439,7 +483,7 @@ export default function DocumentsPage() {
       }
 
       clearComposer()
-      await load()
+      await load(selectedFolder.company_id)
     } catch (err: any) {
       setError(err?.message || 'Une erreur est survenue pendant le depot.')
     } finally {
@@ -498,7 +542,7 @@ export default function DocumentsPage() {
                 <select
                   className="workspace-select"
                   value={activeCompanyId}
-                  onChange={(event) => setActiveCompanyId(event.target.value)}
+                  onChange={(event) => handleCompanyChange(event.target.value)}
                 >
                   <option value="">Selectionner un client</option>
                   {managedCompanies.map((company: any) => (
@@ -523,7 +567,7 @@ export default function DocumentsPage() {
                 <span className="docs-label">Dossier racine</span>
                 <button className="workspace-button primary archive-create-button" type="button" onClick={createExerciseFolder} disabled={creatingExercise || !activeCompanyId}>
                   <Plus size={14} />
-                  <span>{creatingExercise ? 'Creation...' : "Creer l'exercice"}</span>
+                  <span>{creatingExercise ? 'Creation...' : `Creer le dossier ${exerciseYear}`}</span>
                 </button>
               </div>
 
@@ -558,9 +602,22 @@ export default function DocumentsPage() {
           <div className="archive-folder-list">
             {folderTree.length === 0 ? (
               <div className="workspace-empty">
-                {mode === 'cabinet'
-                  ? "Aucun dossier d'exercice. Creez d'abord 2024, 2025, etc."
-                  : "Aucun dossier d'exercice n'est encore disponible. Le cabinet doit en creer un."}
+                {mode === 'cabinet' ? (
+                  <div style={{ display:'grid', gap:12, justifyItems:'center' }}>
+                    <div>Aucun dossier d'exercice. Creez d'abord 2024, 2025, etc.</div>
+                    <button
+                      className="workspace-button primary"
+                      type="button"
+                      onClick={createExerciseFolder}
+                      disabled={creatingExercise || !activeCompanyId}
+                    >
+                      <Plus size={14} />
+                      <span>{creatingExercise ? 'Creation...' : `Creer ${exerciseYear}`}</span>
+                    </button>
+                  </div>
+                ) : (
+                  "Aucun dossier d'exercice n'est encore disponible. Le cabinet doit en creer un."
+                )}
               </div>
             ) : (
               folderTree.map(({ folder, depth }) => {
@@ -573,7 +630,10 @@ export default function DocumentsPage() {
                     key={folder.id}
                     type="button"
                     className={`archive-folder-button ${active ? 'is-active' : ''}`}
-                    onClick={() => setSelectedFolderId(folder.id)}
+                    onClick={() => {
+                      setSelectedFolderId(folder.id)
+                      setError('')
+                    }}
                     style={{ paddingLeft: `${14 + depth * 20}px` }}
                   >
                     <div className="archive-folder-main">
