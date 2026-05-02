@@ -20,25 +20,9 @@ function getSlugFromPathname(pathname: string) {
 }
 
 async function loadAllCompaniesForManagementCabinet(cabinetId: string) {
-  const { data: adminCompanies, error: adminError } = await supabase.rpc('admin_list_companies')
-
-  if (!adminError && Array.isArray(adminCompanies) && adminCompanies.length > 0) {
-    return adminCompanies
-      .filter((company: any) => String(company.slug || '').toLowerCase() !== 'rs')
-      .map((company: any) => ({
-        id: company.company_id || company.id,
-        name: company.name,
-        slug: company.slug,
-        workspace_type: company.workspace_type || 'client',
-        parent_cabinet_id: company.parent_cabinet_id || cabinetId,
-        owner_email: company.owner_email || null,
-        active_modules: company.active_modules || [],
-      }))
-  }
-
   const { data, error } = await supabase
     .from('companies')
-    .select('id,name,slug,workspace_type,parent_cabinet_id')
+    .select('id,name,slug')
     .neq('id', cabinetId)
     .neq('slug', 'rs')
     .order('name', { ascending: true })
@@ -46,7 +30,11 @@ async function loadAllCompaniesForManagementCabinet(cabinetId: string) {
   if (error) throw error
 
   return (data || []).map((company: any) => ({
-    ...company,
+    id: company.id,
+    name: company.name,
+    slug: company.slug,
+    workspace_type: 'client',
+    parent_cabinet_id: cabinetId,
     owner_email: null,
     active_modules: [],
   }))
