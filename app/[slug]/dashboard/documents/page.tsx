@@ -214,17 +214,8 @@ export default function DocumentsPage() {
       }
 
       const [{ data: folderRows, error: folderError }, { data: fileRows, error: fileError }] = await Promise.all([
-        supabase
-          .from('document_exercise_folders')
-          .select('*')
-          .eq('company_id', companyId)
-          .order('exercise_year', { ascending: false })
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('document_archive_files')
-          .select('*')
-          .eq('company_id', companyId)
-          .order('created_at', { ascending: false }),
+        supabase.rpc('list_company_archive_folders', { p_company_id: companyId }),
+        supabase.rpc('list_company_archive_files', { p_company_id: companyId }),
       ])
 
       if (folderError || fileError) {
@@ -354,30 +345,15 @@ export default function DocumentsPage() {
     setError('')
 
     try {
-      let insertError: any = null
-      const rootPayload = {
-        company_id: activeCompanyId,
-        exercise_year: exerciseYear,
-        folder_name: folderLabel(exerciseYear),
-        folder_kind: 'exercise',
-        parent_folder_id: null,
-        created_by: user.id,
-      }
-
-      const rootInsert = await supabase.from('document_exercise_folders').insert(rootPayload)
-      insertError = rootInsert.error
-
-      if (insertError?.message?.includes('parent_folder_id') || insertError?.message?.includes('folder_name') || insertError?.message?.includes('folder_kind')) {
-        const legacyInsert = await supabase.from('document_exercise_folders').insert({
-          company_id: activeCompanyId,
-          exercise_year: exerciseYear,
-          created_by: user.id,
-        })
-        insertError = legacyInsert.error
-      }
+      const { error: insertError } = await supabase.rpc('create_company_archive_folder', {
+        p_company_id: activeCompanyId,
+        p_exercise_year: exerciseYear,
+        p_folder_name: folderLabel(exerciseYear),
+        p_parent_folder_id: null,
+      })
 
       if (insertError) {
-        throw new Error('Impossible de creer ce dossier d exercice. Verifiez si cette annee existe deja.')
+        throw new Error(insertError.message || 'Impossible de creer ce dossier d exercice.')
       }
 
       await load(activeCompanyId)
@@ -405,24 +381,15 @@ export default function DocumentsPage() {
     setError('')
 
     try {
-      const { error: insertError } = await supabase.from('document_exercise_folders').insert({
-        company_id: selectedFolder.company_id,
-        exercise_year: selectedFolder.exercise_year,
-        folder_name: nextName,
-        folder_kind: 'folder',
-        parent_folder_id: selectedFolder.id,
-        created_by: user.id,
+      const { error: insertError } = await supabase.rpc('create_company_archive_folder', {
+        p_company_id: selectedFolder.company_id,
+        p_exercise_year: selectedFolder.exercise_year,
+        p_folder_name: nextName,
+        p_parent_folder_id: selectedFolder.id,
       })
 
       if (insertError) {
-        if (
-          insertError.message?.includes('parent_folder_id') ||
-          insertError.message?.includes('folder_name') ||
-          insertError.message?.includes('folder_kind')
-        ) {
-          throw new Error("Le support des sous-dossiers n'est pas encore present dans Supabase. Appliquez la migration nested folders.")
-        }
-        throw new Error('Impossible de creer ce sous-dossier.')
+        throw new Error(insertError.message || 'Impossible de creer ce sous-dossier.')
       }
 
       setSubfolderName('')
@@ -450,8 +417,6 @@ export default function DocumentsPage() {
     setError('')
 
     try {
-      const rowsToInsert = []
-
       for (const [index, entry] of queuedFiles.entries()) {
         const path = buildStoragePath(selectedFolder.company_id, selectedFolder.id, entry.file.name)
         const { error: uploadError } = await supabase.storage.from(ARCHIVE_BUCKET).upload(path, entry.file, {
@@ -463,23 +428,20 @@ export default function DocumentsPage() {
           throw new Error('Impossible d envoyer le fichier. Verifiez le bucket document-archive et sa migration Supabase.')
         }
 
-        rowsToInsert.push({
-          company_id: selectedFolder.company_id,
-          folder_id: selectedFolder.id,
-          created_by: user.id,
-          uploader_role: mode === 'cabinet' ? 'cabinet' : 'client',
-          name: baseTitle ? (queuedFiles.length === 1 ? baseTitle : `${baseTitle} (${index + 1})`) : entry.file.name,
-          description: uploadDescription.trim() || null,
-          file_bucket: ARCHIVE_BUCKET,
-          file_path: path,
-          file_size: entry.file.size,
-          mime_type: entry.file.type || null,
+        const { error: recordError } = await supabase.rpc('create_company_archive_file_record', {
+          p_company_id: selectedFolder.company_id,
+          p_folder_id: selectedFolder.id,
+          p_name: baseTitle ? (queuedFiles.length === 1 ? baseTitle : `${baseTitle} (${index + 1})`) : entry.file.name,
+          p_description: uploadDescription.trim() || null,
+          p_file_bucket: ARCHIVE_BUCKET,
+          p_file_path: path,
+          p_file_size: entry.file.size,
+          p_mime_type: entry.file.type || null,
+          p_uploader_role: mode === 'cabinet' ? 'cabinet' : 'client',
         })
-      }
-
-      const { error: insertError } = await supabase.from('document_archive_files').insert(rowsToInsert)
-      if (insertError) {
-        throw new Error('Impossible d enregistrer les fichiers dans l archive.')
+        if (recordError) {
+          throw new Error(recordError.message || 'Impossible d enregistrer les fichiers dans l archive.')
+        }
       }
 
       clearComposer()
