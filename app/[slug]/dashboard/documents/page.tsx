@@ -160,6 +160,32 @@ function buildFolderPath(folderId: string, lookup: Record<string, ArchiveFolder>
   return labels.join(' / ')
 }
 
+function isMissingRpcFunction(error: any, functionName: string) {
+  const message = String(error?.message || '').toLowerCase()
+  return (
+    error?.code === 'PGRST202' ||
+    message.includes(`could not find the function public.${functionName}`.toLowerCase()) ||
+    message.includes('schema cache')
+  )
+}
+
+function isArchiveSchemaColumnError(error: any) {
+  const message = String(error?.message || '').toLowerCase()
+  return (
+    message.includes('parent_folder_id') ||
+    message.includes('folder_name') ||
+    message.includes('folder_kind')
+  )
+}
+
+function formatFolderCreationError(error: any, fallbackMessage: string) {
+  if (error?.code === '23505') {
+    return 'Cet exercice existe deja.'
+  }
+  const message = String(error?.message || '')
+  return message || fallbackMessage
+}
+
 export default function DocumentsPage() {
   const pathname = usePathname()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -182,6 +208,117 @@ export default function DocumentsPage() {
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploadDescription, setUploadDescription] = useState('')
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([])
+
+  async function loadArchiveData(companyId: string) {
+    const [{ data: folderRows, error: folderError }, { data: fileRows, error: fileError }] = await Promise.all([
+      supabase.rpc('list_company_archive_folders', { p_company_id: companyId }),
+      supabase.rpc('list_company_archive_files', { p_company_id: companyId }),
+    ])
+
+    if (!folderError && !fileError) {
+      return {
+        folderRows: folderRows || [],
+        fileRows: fileRows || [],
+      }
+    }
+
+    const shouldFallback =
+      (!folderError || isMissingRpcFunction(folderError, 'list_company_archive_folders')) &&
+      (!fileError || isMissingRpcFunction(fileError, 'list_company_archive_files'))
+
+    if (!shouldFallback) {
+      throw new Error(folderError?.message || fileError?.message || 'Module archives documents non initialise dans la base.')
+    }
+
+    const [{ data: directFolders, error: directFolderError }, { data: directFiles, error: directFileError }] = await Promise.all([
+      supabase
+        .from('document_exercise_folders')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('exercise_year', { ascending: false })
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('document_archive_files')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false }),
+    ])
+
+    if (directFolderError || directFileError) {
+      throw new Error(directFolderError?.message || directFileError?.message || 'Module archives documents non initialise dans la base.')
+    }
+
+    return {
+      folderRows: directFolders || [],
+      fileRows: directFiles || [],
+    }
+  }
+
+  async function createExerciseFolderFallback(companyId: string, year: number, createdBy?: string | null) {
+    const rootInsert = await supabase.from('document_exercise_folders').insert({
+      company_id: companyId,
+      exercise_year: year,
+      folder_name: folderLabel(year),
+      folder_kind: 'exercise',
+      parent_folder_id: null,
+      created_by: createdBy || null,
+    })
+
+    if (!rootInsert.error) return
+    if (!isArchiveSchemaColumnError(rootInsert.error)) throw rootInsert.error
+
+    const legacyInsert = await supabase.from('document_exercise_folders').insert({
+      company_id: companyId,
+      exercise_year: year,
+      created_by: createdBy || null,
+    })
+
+    if (legacyInsert.error) throw legacyInsert.error
+  }
+
+  async function createSubfolderFallback(folder: ArchiveFolder, name: string, createdBy?: string | null) {
+    const insertResult = await supabase.from('document_exercise_folders').insert({
+      company_id: folder.company_id,
+      exercise_year: folder.exercise_year,
+      folder_name: name,
+      folder_kind: 'folder',
+      parent_folder_id: folder.id,
+      created_by: createdBy || null,
+    })
+
+    if (!insertResult.error) return
+    if (isArchiveSchemaColumnError(insertResult.error)) {
+      throw new Error("Le support des sous-dossiers n'est pas encore present dans Supabase. Appliquez la migration nested folders.")
+    }
+
+    throw insertResult.error
+  }
+
+  async function createArchiveFileRecordFallback(
+    folder: ArchiveFolder,
+    name: string,
+    description: string | null,
+    path: string,
+    size: number,
+    mimeType: string | null,
+    uploaderRole: 'cabinet' | 'client',
+    createdBy?: string | null,
+  ) {
+    const { error } = await supabase.from('document_archive_files').insert({
+      company_id: folder.company_id,
+      folder_id: folder.id,
+      created_by: createdBy || null,
+      uploader_role: uploaderRole,
+      name,
+      description,
+      file_bucket: ARCHIVE_BUCKET,
+      file_path: path,
+      file_size: size,
+      mime_type: mimeType,
+    })
+
+    if (error) throw error
+  }
 
   async function load(companyOverride?: string) {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
@@ -213,14 +350,7 @@ export default function DocumentsPage() {
         return
       }
 
-      const [{ data: folderRows, error: folderError }, { data: fileRows, error: fileError }] = await Promise.all([
-        supabase.rpc('list_company_archive_folders', { p_company_id: companyId }),
-        supabase.rpc('list_company_archive_files', { p_company_id: companyId }),
-      ])
-
-      if (folderError || fileError) {
-        throw new Error('Module archives documents non initialise dans la base.')
-      }
+      const { folderRows, fileRows } = await loadArchiveData(companyId)
 
       const nextFolders = (folderRows || []).map(normalizeFolder) as ArchiveFolder[]
       const nextFiles = await withSignedUrls((fileRows || []) as ArchiveFile[])
@@ -353,12 +483,16 @@ export default function DocumentsPage() {
       })
 
       if (insertError) {
-        throw new Error(insertError.message || 'Impossible de creer ce dossier d exercice.')
+        if (isMissingRpcFunction(insertError, 'create_company_archive_folder')) {
+          await createExerciseFolderFallback(activeCompanyId, exerciseYear, user?.id || null)
+        } else {
+          throw insertError
+        }
       }
 
       await load(activeCompanyId)
     } catch (err: any) {
-      setError(err?.message || 'Impossible de creer le dossier.')
+      setError(formatFolderCreationError(err, 'Impossible de creer le dossier.'))
     } finally {
       setCreatingExercise(false)
     }
@@ -389,7 +523,11 @@ export default function DocumentsPage() {
       })
 
       if (insertError) {
-        throw new Error(insertError.message || 'Impossible de creer ce sous-dossier.')
+        if (isMissingRpcFunction(insertError, 'create_company_archive_folder')) {
+          await createSubfolderFallback(selectedFolder, nextName, user?.id || null)
+        } else {
+          throw insertError
+        }
       }
 
       setSubfolderName('')
@@ -440,7 +578,20 @@ export default function DocumentsPage() {
           p_uploader_role: mode === 'cabinet' ? 'cabinet' : 'client',
         })
         if (recordError) {
-          throw new Error(recordError.message || 'Impossible d enregistrer les fichiers dans l archive.')
+          if (isMissingRpcFunction(recordError, 'create_company_archive_file_record')) {
+            await createArchiveFileRecordFallback(
+              selectedFolder,
+              baseTitle ? (queuedFiles.length === 1 ? baseTitle : `${baseTitle} (${index + 1})`) : entry.file.name,
+              uploadDescription.trim() || null,
+              path,
+              entry.file.size,
+              entry.file.type || null,
+              mode === 'cabinet' ? 'cabinet' : 'client',
+              user?.id || null,
+            )
+          } else {
+            throw new Error(recordError.message || 'Impossible d enregistrer les fichiers dans l archive.')
+          }
         }
       }
 
