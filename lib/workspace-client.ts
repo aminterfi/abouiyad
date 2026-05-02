@@ -19,8 +19,21 @@ export async function loadManagedClientWorkspaces(cabinetId: string) {
     p_cabinet_id: cabinetId,
   })
 
-  if (error) throw error
-  return data || []
+  if (!error) return data || []
+
+  const { data: companies, error: companyError } = await supabase
+    .from('companies')
+    .select('id,name,slug,workspace_type,parent_cabinet_id')
+    .eq('parent_cabinet_id', cabinetId)
+    .order('name', { ascending: true })
+
+  if (companyError) throw error
+
+  return (companies || []).map((company: any) => ({
+    ...company,
+    owner_email: null,
+    active_modules: [],
+  }))
 }
 
 export async function loadOperationalScope(companyId: string, pathname: string) {
@@ -32,7 +45,12 @@ export async function loadOperationalScope(companyId: string, pathname: string) 
     }
   }
 
-  const companies = await loadManagedClientWorkspaces(companyId)
+  let companies: any[] = []
+  try {
+    companies = await loadManagedClientWorkspaces(companyId)
+  } catch {
+    companies = []
+  }
   const companyIds = companies.map((company: any) => company.id).filter(Boolean)
 
   return {
