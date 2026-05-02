@@ -1,4 +1,4 @@
-import { detectWorkspaceType, type WorkspaceType } from '@/lib/workspace'
+import { detectWorkspaceType, enforceWorkspaceTypeForSlug, type WorkspaceType } from '@/lib/workspace'
 
 export type CompanyWorkspaceRecord = {
   id: string | null
@@ -40,7 +40,10 @@ export async function getCompanyWorkspaceBySlug(slug: string, fallbackType: Work
       id: data.id || null,
       slug: String(data.slug || slug),
       name: String(data.name || data.company_name || slug),
-      workspaceType: detectWorkspaceType(data, fallbackType),
+      workspaceType: enforceWorkspaceTypeForSlug(
+        String(data.slug || slug),
+        detectWorkspaceType(data, fallbackType),
+      ),
       parentCabinetId: data.parent_cabinet_id || null,
       logoUrl: typeof data.logo_url === 'string' && data.logo_url.trim() ? data.logo_url.trim() : null,
       primaryColor: typeof data.primary_color === 'string' && data.primary_color.trim() ? data.primary_color.trim() : null,

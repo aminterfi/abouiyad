@@ -3,50 +3,92 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, usePathname, useRouter } from 'next/navigation'
+import {
+  BellRing,
+  BriefcaseBusiness,
+  Building2,
+  CircleHelp,
+  CreditCard,
+  FileArchive,
+  FileStack,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Package,
+  Receipt,
+  Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
+  SquareUserRound,
+  Ticket,
+  Users,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getDefaultWorkspacePath, normalizeWorkspaceSession, type ShellKey } from '@/lib/workspace'
+import {
+  getDefaultWorkspacePath,
+  isManagementSlug,
+  normalizeWorkspaceSession,
+  type ShellKey,
+} from '@/lib/workspace'
 
 type NavItem = {
   label: string
   href: string
   section: string
+  icon: LucideIcon
+}
+
+function cabinetNav(slug: string, isPlatformAdmin: boolean): NavItem[] {
+  return [
+    { section: 'Cabinet', label: 'Accueil cabinet', href: `/${slug}/cabinet`, icon: BriefcaseBusiness },
+    { section: 'Cabinet', label: 'Clients geres', href: `/${slug}/cabinet/clients`, icon: Building2 },
+    { section: 'Operations', label: 'Demandes', href: `/${slug}/cabinet/demandes`, icon: BellRing },
+    { section: 'Operations', label: 'Tickets', href: `/${slug}/cabinet/tickets`, icon: Ticket },
+    { section: 'Operations', label: 'Documents', href: `/${slug}/cabinet/documents`, icon: FileArchive },
+    ...(isPlatformAdmin ? [
+      { section: 'Pilotage', label: 'Abonnements', href: `/${slug}/cabinet/abonnements`, icon: CreditCard },
+      { section: 'Pilotage', label: 'Configuration', href: `/${slug}/cabinet/configuration`, icon: SlidersHorizontal },
+    ] : []),
+  ]
+}
+
+function clientNav(slug: string): NavItem[] {
+  return [
+    { section: 'Portail client', label: 'Tableau de bord', href: `/${slug}/client`, icon: LayoutDashboard },
+    { section: 'Facturation', label: 'Factures', href: `/${slug}/client/factures`, icon: Receipt },
+    { section: 'Facturation', label: 'Paiements', href: `/${slug}/client/paiements`, icon: WalletCards },
+    { section: 'Facturation', label: 'Clients', href: `/${slug}/client/clients`, icon: Users },
+    { section: 'Facturation', label: 'Produits', href: `/${slug}/client/produits`, icon: Package },
+    { section: 'Facturation', label: 'Stock', href: `/${slug}/client/stock`, icon: FileStack },
+    { section: 'Collaboration', label: 'Demandes', href: `/${slug}/client/demandes`, icon: BellRing },
+    { section: 'Collaboration', label: 'Tickets', href: `/${slug}/client/tickets`, icon: Ticket },
+    { section: 'Collaboration', label: 'Documents', href: `/${slug}/client/documents`, icon: FileArchive },
+    { section: 'Administration', label: 'Utilisateurs', href: `/${slug}/client/utilisateurs`, icon: SquareUserRound },
+    { section: 'Administration', label: 'Parametres', href: `/${slug}/client/parametres`, icon: Settings2 },
+    { section: 'Administration', label: 'Profil', href: `/${slug}/client/profil`, icon: CircleHelp },
+  ]
 }
 
 function buildNav(slug: string, shell: ShellKey, isPlatformAdmin: boolean) {
-  if (shell === 'admin-rs') {
-    return [
-      { section: 'Administration', label: 'Admin RS', href: `/${slug}/admin-rs` },
-      { section: 'Administration', label: 'Demandes', href: `/${slug}/admin-rs/demandes` },
-      { section: 'Administration', label: 'Tickets', href: `/${slug}/admin-rs/tickets` },
-      { section: 'Administration', label: 'Documents', href: `/${slug}/admin-rs/documents` },
-      { section: 'Administration', label: 'Cabinet', href: `/${slug}/cabinet` },
-    ]
+  if (shell === 'client') return clientNav(slug)
+  return cabinetNav(slug, isPlatformAdmin)
+}
+
+function shellTitle(shell: ShellKey) {
+  if (shell === 'client') {
+    return {
+      title: 'Portail client',
+      subtitle: 'Facturation, paiements, stock et collaboration au quotidien.',
+    }
   }
 
-  if (shell === 'cabinet') {
-    return [
-      { section: 'Cabinet', label: 'Vue cabinet', href: `/${slug}/cabinet` },
-      { section: 'Operations', label: 'Demandes', href: `/${slug}/cabinet/demandes` },
-      { section: 'Operations', label: 'Tickets', href: `/${slug}/cabinet/tickets` },
-      { section: 'Operations', label: 'Documents', href: `/${slug}/cabinet/documents` },
-      ...(isPlatformAdmin ? [{ section: 'Cabinet', label: 'Admin RS', href: `/${slug}/admin-rs` }] : []),
-    ]
+  return {
+    title: 'Cabinet',
+    subtitle: 'Pilotage des clients, abonnements et files operationnelles.',
   }
-
-  return [
-    { section: 'Client', label: 'Tableau de bord', href: `/${slug}/client` },
-    { section: 'Facturation', label: 'Factures', href: `/${slug}/client/factures` },
-    { section: 'Facturation', label: 'Clients', href: `/${slug}/client/clients` },
-    { section: 'Facturation', label: 'Paiements', href: `/${slug}/client/paiements` },
-    { section: 'Facturation', label: 'Produits', href: `/${slug}/client/produits` },
-    { section: 'Facturation', label: 'Stock', href: `/${slug}/client/stock` },
-    { section: 'Collaboration', label: 'Demandes', href: `/${slug}/client/demandes` },
-    { section: 'Collaboration', label: 'Tickets', href: `/${slug}/client/tickets` },
-    { section: 'Collaboration', label: 'Documents', href: `/${slug}/client/documents` },
-    { section: 'Administration', label: 'Utilisateurs', href: `/${slug}/client/utilisateurs` },
-    { section: 'Administration', label: 'Parametres', href: `/${slug}/client/parametres` },
-    { section: 'Administration', label: 'Profil', href: `/${slug}/client/profil` },
-  ]
 }
 
 export default function WorkspaceShell({
@@ -61,13 +103,23 @@ export default function WorkspaceShell({
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [settings, setSettings] = useState<any>(null)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const resolvedShell: ShellKey = shell === 'admin-rs' ? 'cabinet' : shell
 
   useEffect(() => {
-    const session = normalizeWorkspaceSession(JSON.parse(localStorage.getItem('user') || '{}'))
+    const raw = localStorage.getItem('user')
+    const session = normalizeWorkspaceSession(JSON.parse(raw || '{}'))
     if (!session?.company_id && !session?.is_platform_admin) {
       router.push(`/${slug}`)
       return
     }
+
+    const allowedShell: ShellKey = isManagementSlug(slug) ? 'cabinet' : 'client'
+    if (resolvedShell !== allowedShell) {
+      router.replace(`/${slug}/${allowedShell}`)
+      return
+    }
+
     setUser(session)
 
     if (session.company_id) {
@@ -80,10 +132,17 @@ export default function WorkspaceShell({
     }
   }, [router, slug])
 
-  const nav = useMemo(() => buildNav(slug, shell, user?.is_platform_admin === true), [shell, slug, user?.is_platform_admin])
-  const sections = Array.from(new Set(nav.map((item) => item.section)))
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
 
-  const title = nav.find((item) => pathname === item.href)?.label || (shell === 'client' ? 'Espace client' : shell === 'cabinet' ? 'Cabinet' : 'Admin RS')
+  const isPlatformAdmin = user?.is_platform_admin === true
+  const nav = useMemo(() => buildNav(slug, resolvedShell, isPlatformAdmin), [slug, resolvedShell, isPlatformAdmin])
+  const sections = Array.from(new Set(nav.map((item) => item.section)))
+  const titleMeta = shellTitle(resolvedShell)
+  const currentLabel = nav.find((item) => pathname === item.href)?.label || titleMeta.title
+  const brandName = settings?.company_name || user?.company_name || 'RSS'
+  const brandColor = settings?.primary_color || '#2563EB'
 
   function logout() {
     localStorage.removeItem('user')
@@ -99,89 +158,100 @@ export default function WorkspaceShell({
 
   if (!user) {
     return (
-      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f5f4f1', color:'#a8a69e' }}>
-        Chargement...
+      <div className={`workspace-shell ${resolvedShell === 'cabinet' ? 'theme-cabinet' : 'theme-client'}`}>
+        <div style={{ minHeight:'100vh', display:'grid', placeItems:'center', color:'var(--ws-muted)' }}>
+          Chargement...
+        </div>
       </div>
     )
   }
 
-  const brandName = settings?.company_name || user.company_name || 'RSS'
-  const brandColor = settings?.primary_color || '#2563EB'
-
   return (
-    <div style={{ minHeight:'100vh', background:'#f5f4f1', display:'grid', gridTemplateColumns:'260px minmax(0,1fr)' }}>
-      <aside style={{ background:'#16171b', color:'#fff', padding:'20px 16px', display:'flex', flexDirection:'column', gap:18 }}>
-        <button onClick={goHome} style={{ background:'transparent', border:'none', color:'#fff', cursor:'pointer', textAlign:'left', padding:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            {settings?.logo_url ? (
-              <img src={settings.logo_url} alt={brandName} style={{ width:40, height:40, borderRadius:10, objectFit:'cover' }} />
-            ) : (
-              <div style={{ width:40, height:40, borderRadius:10, background:brandColor, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>
-                {brandName.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div style={{ minWidth:0 }}>
-              <div style={{ fontSize:14, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{brandName}</div>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.55)' }}>/{slug}</div>
-            </div>
-          </div>
-        </button>
+    <div className={`workspace-shell ${resolvedShell === 'cabinet' ? 'theme-cabinet' : 'theme-client'}`}>
+      {mobileOpen && (
+        <div
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.44)', zIndex:30 }}
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
 
-        <div style={{ display:'grid', gap:14 }}>
+      <aside className={`ws-sidebar ${mobileOpen ? 'is-open' : ''}`}>
+        <div className="ws-sidebar-head">
+          <button className="ws-brand-button" onClick={goHome}>
+            <div className="ws-brand-row">
+              {settings?.logo_url ? (
+                <img className="ws-brand-image" src={settings.logo_url} alt={brandName} />
+              ) : (
+                <div className="ws-brand-mark" style={{ background:brandColor }}>
+                  {brandName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <div className="ws-brand-title">{brandName}</div>
+                <div className="ws-brand-subtitle">/{slug}</div>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <nav className="ws-sidebar-nav">
           {sections.map((section) => (
-            <div key={section}>
-              <div style={{ fontSize:10, textTransform:'uppercase', letterSpacing:'.6px', color:'rgba(255,255,255,0.38)', marginBottom:8 }}>{section}</div>
-              <div style={{ display:'grid', gap:4 }}>
+            <div key={section} className="ws-nav-group">
+              <div className="ws-nav-label">{section}</div>
+              <div style={{ display:'grid', gap:6 }}>
                 {nav.filter((item) => item.section === section).map((item) => {
+                  const Icon = item.icon
                   const active = pathname === item.href
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      style={{
-                        textDecoration:'none',
-                        color: active ? '#fff' : 'rgba(255,255,255,0.68)',
-                        background: active ? 'rgba(37,99,235,0.35)' : 'transparent',
-                        border:'1px solid ' + (active ? 'rgba(96,165,250,0.35)' : 'transparent'),
-                        borderRadius:10,
-                        padding:'10px 12px',
-                        fontSize:13,
-                        fontWeight: active ? 600 : 500,
-                      }}
-                    >
-                      {item.label}
+                    <Link key={item.href} href={item.href} className={`ws-nav-link ${active ? 'is-active' : ''}`}>
+                      <Icon className="ws-nav-icon" />
+                      <span className="ws-nav-text">{item.label}</span>
                     </Link>
                   )
                 })}
               </div>
             </div>
           ))}
-        </div>
+        </nav>
 
-        <div style={{ marginTop:'auto', borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:14, display:'grid', gap:8 }}>
-          <div style={{ fontSize:12, fontWeight:600 }}>{user.full_name}</div>
-          <div style={{ fontSize:11, color:'rgba(255,255,255,0.48)' }}>
-            {shell === 'client' ? 'Portail client' : shell === 'cabinet' ? 'Espace cabinet' : 'Administration RS'}
+        <div className="ws-sidebar-foot">
+          <div className="ws-user-name">{user.full_name}</div>
+          <div className="ws-user-meta">
+            {resolvedShell === 'client' ? 'Version client' : isPlatformAdmin ? 'Cabinet / administration' : 'Cabinet'}
           </div>
-          <button onClick={logout} style={{ marginTop:4, border:'1px solid rgba(255,255,255,0.12)', background:'transparent', color:'#fff', borderRadius:10, padding:'10px 12px', cursor:'pointer', fontFamily:'inherit' }}>
-            Deconnexion
+          <button className="ws-logout-button" onClick={logout}>
+            <LogOut size={16} />
+            <span>Deconnexion</span>
           </button>
         </div>
       </aside>
 
-      <div style={{ minWidth:0, display:'flex', flexDirection:'column' }}>
-        <header style={{ height:58, borderBottom:'1px solid rgba(0,0,0,0.06)', background:'#fff', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 18px' }}>
-          <div>
-            <div style={{ fontSize:15, fontWeight:700 }}>{title}</div>
-            <div style={{ fontSize:11, color:'#6b6860', marginTop:2 }}>
-              {shell === 'client' ? 'Espace client et operations metier.' : shell === 'cabinet' ? 'Pilotage des clients et files operationnelles.' : 'Gestion des abonnements et workspaces.'}
+      <div className="ws-main">
+        <header className="ws-topbar">
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <button className="ws-mobile-menu" onClick={() => setMobileOpen((value) => !value)}>
+              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+            <div>
+              <div className="ws-topbar-title">{currentLabel}</div>
+              <div className="ws-topbar-subtitle">{titleMeta.subtitle}</div>
             </div>
           </div>
-          <Link href="/hub" style={{ textDecoration:'none', fontSize:12, color:'#2563EB', fontWeight:600 }}>
-            Mes entreprises
-          </Link>
+          <div className="ws-topbar-actions">
+            {isPlatformAdmin && resolvedShell === 'cabinet' && isManagementSlug(slug) && (
+              <span className="workspace-chip accent">
+                <ShieldCheck size={13} />
+                <span>Admin RS</span>
+              </span>
+            )}
+            <Link href="/hub" className="ws-topbar-link">
+              <Building2 size={15} />
+              <span>Mes entreprises</span>
+            </Link>
+          </div>
         </header>
-        <main style={{ padding:20, minWidth:0 }}>{children}</main>
+
+        <main className="ws-content">{children}</main>
       </div>
     </div>
   )

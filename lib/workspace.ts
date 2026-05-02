@@ -1,5 +1,6 @@
 export type WorkspaceType = 'cabinet' | 'client'
 export type ShellKey = 'admin-rs' | 'cabinet' | 'client'
+export const MANAGEMENT_SLUG = 'rs'
 
 export type WorkspaceSession = {
   id?: string
@@ -17,6 +18,18 @@ export type WorkspaceSession = {
   parent_cabinet_id: string | null
   active_company_id: string | null
   active_slug: string | null
+}
+
+export function isManagementSlug(slug: string | null | undefined): boolean {
+  return String(slug || '').trim().toLowerCase() === MANAGEMENT_SLUG
+}
+
+export function enforceWorkspaceTypeForSlug(
+  slug: string | null | undefined,
+  fallback: WorkspaceType = 'client',
+): WorkspaceType {
+  if (!slug) return fallback
+  return isManagementSlug(slug) ? 'cabinet' : 'client'
 }
 
 export function detectWorkspaceType(value: any, fallback: WorkspaceType = 'client'): WorkspaceType {
@@ -41,10 +54,10 @@ export function detectShellFromPath(pathname: string | null | undefined): ShellK
 }
 
 export function normalizeWorkspaceSession(raw: any, fallbackType: WorkspaceType = 'client'): WorkspaceSession {
-  const workspaceType = detectWorkspaceType(raw, fallbackType)
+  const activeSlug = raw?.active_slug || raw?.slug || null
+  const workspaceType = enforceWorkspaceTypeForSlug(activeSlug, detectWorkspaceType(raw, fallbackType))
   const workspaceRole = String(raw?.workspace_role || raw?.role || (raw?.type === 'owner' ? 'owner' : 'lecteur') || 'lecteur')
   const activeCompanyId = raw?.active_company_id || raw?.company_id || null
-  const activeSlug = raw?.active_slug || raw?.slug || null
 
   return {
     ...raw,
@@ -63,9 +76,9 @@ export function getShellRoot(slug: string, shell: ShellKey): string {
   return `/${slug}/${shell}`
 }
 
-export function getDefaultShell(session: Partial<WorkspaceSession> | null | undefined): ShellKey {
-  if (session?.is_platform_admin) return 'admin-rs'
-  return session?.workspace_type === 'cabinet' ? 'cabinet' : 'client'
+export function getDefaultShell(session: Partial<WorkspaceSession> | null | undefined, slug?: string | null): ShellKey {
+  const activeSlug = slug || session?.active_slug || session?.slug
+  return isManagementSlug(activeSlug) ? 'cabinet' : 'client'
 }
 
 export function getDefaultWorkspacePath(session: Partial<WorkspaceSession> | null | undefined, slug?: string | null): string {
@@ -80,12 +93,18 @@ export function getLegacyDashboardRedirect(
   workspaceType: WorkspaceType,
   isPlatformAdmin = false,
 ): string {
+  void workspaceType
+  void isPlatformAdmin
+
   if (suffixParts[0] === 'admin-platform') {
     const rest = suffixParts.slice(1).join('/')
+    if (!isManagementSlug(slug)) {
+      return `/${slug}/client`
+    }
     return rest ? `/${slug}/admin-rs/${rest}` : `/${slug}/admin-rs`
   }
 
-  const shell = isPlatformAdmin ? 'admin-rs' : (workspaceType === 'cabinet' ? 'cabinet' : 'client')
+  const shell = isManagementSlug(slug) ? 'cabinet' : 'client'
   const rest = suffixParts.join('/')
   return rest ? `/${slug}/${shell}/${rest}` : `/${slug}/${shell}`
 }

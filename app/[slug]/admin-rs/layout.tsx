@@ -1,5 +1,19 @@
+import { redirect } from 'next/navigation'
 import WorkspaceShell from '@/components/WorkspaceShell'
+import { isManagementSlug } from '@/lib/workspace'
 
-export default function AdminRsShellLayout({ children }: { children: React.ReactNode }) {
-  return <WorkspaceShell shell="admin-rs">{children}</WorkspaceShell>
+type LayoutParams = Promise<{ slug: string }>
+
+export default async function AdminRsShellLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode
+  params: LayoutParams
+}) {
+  const { slug } = await params
+  if (!isManagementSlug(slug)) {
+    redirect(`/${slug}/client`)
+  }
+  return <WorkspaceShell shell="cabinet">{children}</WorkspaceShell>
 }

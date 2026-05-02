@@ -3,7 +3,13 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { detectWorkspaceType, getDefaultWorkspacePath, normalizeWorkspaceSession, writeWorkspaceSession } from '@/lib/workspace'
+import {
+  detectWorkspaceType,
+  enforceWorkspaceTypeForSlug,
+  getDefaultWorkspacePath,
+  normalizeWorkspaceSession,
+  writeWorkspaceSession,
+} from '@/lib/workspace'
 
 export default function SlugHomePage() {
   const { slug } = useParams() as { slug: string }
@@ -38,6 +44,11 @@ export default function SlugHomePage() {
     init()
   }, [slug])
 
+  useEffect(() => {
+    if (!user) return
+    window.location.replace(getDefaultWorkspacePath(user, slug))
+  }, [user, slug])
+
   async function loginOwner(e: React.FormEvent) {
     e.preventDefault()
     setError(''); setLoading(true)
@@ -62,7 +73,7 @@ export default function SlugHomePage() {
         id: auth.user!.id, email: auth.user!.email, full_name: owner.full_name,
         role: 'owner', company_id: owner.company_id, company_name: owner.company_name,
         is_platform_admin: owner.is_platform_admin, type: 'owner', slug,
-        workspace_type: detectWorkspaceType(company),
+        workspace_type: enforceWorkspaceTypeForSlug(slug, detectWorkspaceType(company)),
         workspace_role: 'owner',
         parent_cabinet_id: company?.parent_cabinet_id || null,
         active_company_id: owner.company_id,
@@ -93,7 +104,7 @@ export default function SlugHomePage() {
         ...data,
         type: 'employee',
         slug,
-        workspace_type: detectWorkspaceType(company),
+        workspace_type: enforceWorkspaceTypeForSlug(slug, detectWorkspaceType(company)),
         parent_cabinet_id: company?.parent_cabinet_id || null,
         active_company_id: data.company_id || company.id,
         active_slug: slug,
@@ -112,7 +123,7 @@ export default function SlugHomePage() {
     setUser(null)
   }
 
-  if (loadingPage) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8f7f5',color:'#a8a69e'}}>Chargement...</div>
+  if (loadingPage || user) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8f7f5',color:'#a8a69e'}}>Chargement...</div>
 
   const c = company?.primary_color || '#2563EB'
 
