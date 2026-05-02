@@ -5,9 +5,71 @@ import { supabase } from '@/lib/supabase'
 import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 
-const card: React.CSSProperties = { background:'#fff', border:'1px solid rgba(0,0,0,0.08)', borderRadius:10, padding:16 }
-const inp: React.CSSProperties = { width:'100%', padding:'10px 12px', border:'1px solid rgba(0,0,0,0.14)', borderRadius:7, background:'#f8f7f5', fontFamily:'inherit' }
-const btn: React.CSSProperties = { border:'none', background:'#2563EB', color:'#fff', borderRadius:7, padding:'10px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }
+const page: React.CSSProperties = { display:'grid', gap:18 }
+const grid: React.CSSProperties = { display:'grid', gap:18 }
+const card: React.CSSProperties = {
+  background:'var(--ws-panel)',
+  border:'1px solid var(--ws-border)',
+  borderRadius:14,
+  padding:18,
+  display:'grid',
+  gap:14,
+}
+const softCard: React.CSSProperties = { ...card, background:'var(--ws-panel-2)' }
+const head: React.CSSProperties = { display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }
+const titleText: React.CSSProperties = { fontSize:15, fontWeight:800 }
+const copy: React.CSSProperties = { fontSize:12, color:'var(--ws-muted)' }
+const field: React.CSSProperties = {
+  width:'100%',
+  minHeight:42,
+  padding:'10px 12px',
+  borderRadius:10,
+  border:'1px solid var(--ws-border)',
+  background:'var(--ws-panel-2)',
+  color:'var(--ws-text)',
+  font:'inherit',
+}
+const textarea: React.CSSProperties = { ...field, minHeight:100, resize:'vertical' }
+const actions: React.CSSProperties = { display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }
+const actionRow: React.CSSProperties = { display:'flex', gap:8, flexWrap:'wrap' }
+const button: React.CSSProperties = {
+  appearance:'none',
+  border:'1px solid transparent',
+  background:'linear-gradient(135deg, var(--ws-accent), var(--ws-accent-2))',
+  color:'#fff',
+  borderRadius:10,
+  minHeight:40,
+  padding:'10px 14px',
+  font:'inherit',
+  fontSize:12,
+  fontWeight:700,
+  cursor:'pointer',
+}
+const statsGrid: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:10 }
+const stat: React.CSSProperties = { padding:14, borderRadius:12, border:'1px solid var(--ws-border)', background:'var(--ws-panel-2)' }
+const statLabel: React.CSSProperties = { fontSize:11, color:'var(--ws-muted)' }
+const statValue: React.CSSProperties = { marginTop:6, fontSize:24, fontWeight:800 }
+const filterRow: React.CSSProperties = { display:'flex', gap:8, flexWrap:'wrap' }
+const list: React.CSSProperties = { display:'grid', gap:10 }
+const item: React.CSSProperties = { border:'1px solid var(--ws-border)', borderRadius:12, padding:14, background:'var(--ws-panel-2)', display:'grid', gap:12 }
+const itemHead: React.CSSProperties = { display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }
+const itemMain: React.CSSProperties = { minWidth:0, flex:1 }
+const badges: React.CSSProperties = { display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }
+const dateCol: React.CSSProperties = { fontSize:12, color:'var(--ws-muted)', textAlign:'right', display:'grid', gap:4 }
+
+function filterButton(active: boolean): React.CSSProperties {
+  return {
+    appearance:'none',
+    border:'1px solid var(--ws-border)',
+    background: active ? '#f8fafc' : 'var(--ws-panel-2)',
+    color: active ? '#0a0f17' : 'var(--ws-text)',
+    borderRadius:999,
+    padding:'7px 11px',
+    font:'inherit',
+    fontSize:12,
+    cursor:'pointer',
+  }
+}
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label:'Nouvelle', color:'#b45309', bg:'rgba(245,158,11,0.12)' },
@@ -24,14 +86,14 @@ const STATUS_ORDER = ['pending', 'in_review', 'approved', 'in_progress', 'ready'
 function statusBadge(status: string) {
   const meta = STATUS_META[status] || STATUS_META.pending
   return (
-    <span style={{ padding:'4px 9px', borderRadius:999, fontSize:11, fontWeight:700, color:meta.color, background:meta.bg, whiteSpace:'nowrap' }}>
+    <span className="ops-pill" style={{ color:meta.color, background:meta.bg }}>
       {meta.label}
     </span>
   )
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   return new Date(value).toLocaleString('fr-DZ')
 }
 
@@ -45,13 +107,12 @@ function requestTypeLabel(type: string) {
 function ProgressLine({ status }: { status: string }) {
   const activeIndex = Math.max(0, STATUS_ORDER.indexOf(status))
   return (
-    <div style={{ display:'grid', gridTemplateColumns:`repeat(${STATUS_ORDER.length},1fr)`, gap:6, marginTop:10 }}>
-      {STATUS_ORDER.map((step, index) => {
-        const active = index <= activeIndex
-        return (
-          <div key={step} style={{ height:6, borderRadius:999, background:active ? '#2563EB' : 'rgba(0,0,0,0.08)', transition:'background .2s ease' }} />
-        )
-      })}
+    <div className="ops-progress">
+      <div className="ops-progress-line" style={{ gridTemplateColumns:`repeat(${STATUS_ORDER.length},1fr)` }}>
+        {STATUS_ORDER.map((step, index) => (
+          <div key={step} className={`ops-progress-step ${index <= activeIndex ? 'is-active' : ''}`} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -69,7 +130,7 @@ export default function DemandesPage() {
   const [user, setUser] = useState<any>(null)
 
   const [mode, setMode] = useState<'client' | 'cabinet'>('client')
-  const canManage = mode === 'cabinet' || user?.is_platform_admin === true
+  const canManage = mode === 'cabinet'
 
   async function load() {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
@@ -95,6 +156,34 @@ export default function DemandesPage() {
   }
 
   useEffect(() => { load() }, [pathname])
+
+  useEffect(() => {
+    let active = true
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    async function setup() {
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+      if (!currentUser.company_id) return
+      const scope = await loadOperationalScope(currentUser.company_id, pathname)
+      if (!active) return
+      const allowedCompanyIds = new Set(scope.companyIds)
+
+      channel = supabase
+        .channel(`demandes-live-${pathname}-${currentUser.id || currentUser.company_id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, (payload: any) => {
+          const companyId = payload?.new?.company_id || payload?.old?.company_id
+          if (!companyId || !allowedCompanyIds.has(companyId)) return
+          load()
+        })
+        .subscribe()
+    }
+
+    setup()
+    return () => {
+      active = false
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [pathname])
 
   async function createRequest() {
     setError('')
@@ -150,95 +239,84 @@ export default function DemandesPage() {
   const companyLookup = Object.fromEntries(managedCompanies.map((company: any) => [company.id, company]))
   const counts = {
     total: rows.length,
-    pending: rows.filter(r => r.status === 'pending').length,
-    inProgress: rows.filter(r => ['in_review', 'approved', 'in_progress'].includes(r.status)).length,
-    ready: rows.filter(r => r.status === 'ready').length,
-    delivered: rows.filter(r => r.status === 'delivered').length,
+    pending: rows.filter((r) => r.status === 'pending').length,
+    inProgress: rows.filter((r) => ['in_review', 'approved', 'in_progress'].includes(r.status)).length,
+    ready: rows.filter((r) => r.status === 'ready').length,
+    delivered: rows.filter((r) => r.status === 'delivered').length,
   }
 
   return (
-    <div style={{ display:'grid', gap:14 }}>
-      <div style={{ display:'grid', gridTemplateColumns: canManage ? '1.15fr .85fr' : '1fr', gap:14 }}>
-        <div style={card}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:12 }}>
+    <div style={page}>
+      <div style={{ ...grid, gridTemplateColumns: canManage ? 'minmax(0, 1.15fr) minmax(320px, 0.85fr)' : '1fr' }}>
+        <section style={card}>
+          <div style={head}>
             <div>
-              <div style={{ fontWeight:700 }}>Nouvelle demande client</div>
-              <div style={{ fontSize:12, color:'#6b6860', marginTop:4 }}>
-                G12, documents generes, documents prepares, ou service sur mesure.
-              </div>
+              <div style={titleText}>Nouvelle demande client</div>
+              <div style={copy}>G12, documents generes, documents prepares, ou service sur mesure.</div>
             </div>
             {statusBadge('pending')}
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:10, marginBottom:10 }}>
-            <select style={inp} value={requestType} onChange={e=>setRequestType(e.target.value)}>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:10 }}>
+            <select style={field} value={requestType} onChange={(e)=>setRequestType(e.target.value)}>
               <option value="g12">G12</option>
               <option value="auto_document">Document auto-genere</option>
               <option value="prepared_document">Document a preparer</option>
               <option value="other">Autre service</option>
             </select>
-            <input style={inp} value={title} onChange={e=>setTitle(e.target.value)} placeholder="Titre de la demande" />
+            <input style={field} value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Titre de la demande" />
           </div>
-          <textarea style={{ ...inp, minHeight:92 }} value={details} onChange={e=>setDetails(e.target.value)} placeholder="Details, echeance, documents necessaires..." />
-          {error && <div style={{ marginTop:10, color:'#dc2626', fontSize:12 }}>{error}</div>}
-          <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:12, color:'#6b6860' }}>
-              Les mises a jour de statut seront visibles au client.
-            </div>
-            <button style={btn} onClick={createRequest} disabled={saving}>{saving ? '...' : 'Envoyer la demande'}</button>
+
+          <textarea style={textarea} value={details} onChange={(e)=>setDetails(e.target.value)} placeholder="Details, echeance, documents necessaires..." />
+
+          {error && <div className="docs-error"><span>{error}</span></div>}
+
+          <div style={actions}>
+            <div style={copy}>Les mises a jour de statut seront visibles au client.</div>
+            <button style={button} onClick={createRequest} disabled={saving}>{saving ? '...' : 'Envoyer la demande'}</button>
           </div>
-        </div>
+        </section>
 
         {canManage && (
-          <div style={{ ...card, display:'grid', gap:10 }}>
-            <div style={{ fontWeight:700 }}>Vue comptable</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>Nouvelles</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{counts.pending}</div>
+          <section style={softCard}>
+            <div style={titleText}>Vue comptable</div>
+            <div style={statsGrid}>
+              <div style={stat}>
+                <div style={statLabel}>Nouvelles</div>
+                <div style={statValue}>{counts.pending}</div>
               </div>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>En traitement</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{counts.inProgress}</div>
+              <div style={stat}>
+                <div style={statLabel}>En traitement</div>
+                <div style={statValue}>{counts.inProgress}</div>
               </div>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>Pretes</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{counts.ready}</div>
+              <div style={stat}>
+                <div style={statLabel}>Pretes</div>
+                <div style={statValue}>{counts.ready}</div>
               </div>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>Livrees</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{counts.delivered}</div>
+              <div style={stat}>
+                <div style={statLabel}>Livrees</div>
+                <div style={statValue}>{counts.delivered}</div>
               </div>
             </div>
-            <div style={{ fontSize:12, color:'#6b6860' }}>
-              Utilisez les statuts pour tenir le client informe sans sortir de l'application.
-            </div>
-          </div>
+            <div style={copy}>Utilisez les statuts pour tenir le client informe sans sortir de l'application.</div>
+          </section>
         )}
       </div>
 
-      <div style={card}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:10, flexWrap:'wrap' }}>
+      <section style={card}>
+        <div style={head}>
           <div>
-            <div style={{ fontWeight:700 }}>{canManage ? 'Ordres et demandes clients' : 'Suivi des demandes'}</div>
-            <div style={{ fontSize:12, color:'#6b6860', marginTop:4 }}>
+            <div style={titleText}>{canManage ? 'Ordres et demandes clients' : 'Suivi des demandes'}</div>
+            <div style={copy}>
               {canManage ? 'Traitez les demandes et faites avancer leur statut.' : "Suivez l'avancement de vos demandes en temps reel."}
             </div>
           </div>
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-            {['all', 'pending', 'in_review', 'ready', 'delivered', 'rejected'].map(value => (
+          <div style={filterRow}>
+            {['all', 'pending', 'in_review', 'ready', 'delivered', 'rejected'].map((value) => (
               <button
                 key={value}
                 onClick={() => setFilter(value)}
-                style={{
-                  border:'1px solid rgba(0,0,0,0.12)',
-                  background: filter === value ? '#1a1916' : '#fff',
-                  color: filter === value ? '#fff' : '#1a1916',
-                  borderRadius:999,
-                  padding:'7px 10px',
-                  fontSize:12,
-                  cursor:'pointer',
-                  fontFamily:'inherit'
-                }}
+                style={filterButton(filter === value)}
               >
                 {value === 'all' ? `Tout (${counts.total})` : STATUS_META[value]?.label || value}
               </button>
@@ -247,31 +325,32 @@ export default function DemandesPage() {
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ fontSize:13, color:'#6b6860' }}>Aucune demande pour ce filtre.</div>
+          <div style={copy}>Aucune demande pour ce filtre.</div>
         ) : (
-          <div style={{ display:'grid', gap:10 }}>
-            {filtered.map((row:any) => (
-              <div key={row.id} style={{ border:'1px solid rgba(0,0,0,0.08)', borderRadius:10, padding:14 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
-                  <div style={{ minWidth:0, flex:1 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                      <div style={{ fontWeight:700 }}>{row.title}</div>
+          <div style={list}>
+            {filtered.map((row: any) => (
+              <article key={row.id} style={item}>
+                <div style={itemHead}>
+                  <div style={itemMain}>
+                    <div style={badges}>
+                      <div style={{ ...titleText, fontSize: 14 }}>{row.title}</div>
                       {statusBadge(row.status)}
                       {mode === 'cabinet' && row.company_id && companyLookup[row.company_id]?.name && (
-                        <span style={{ fontSize:11, fontWeight:700, color:'#2563EB', background:'rgba(37,99,235,0.10)', borderRadius:999, padding:'4px 9px' }}>
+                        <span className="ops-pill" style={{ color:'#2563EB', background:'rgba(37,99,235,0.10)' }}>
                           {companyLookup[row.company_id].name}
                         </span>
                       )}
                       {row.requires_generated_document && (
-                        <span style={{ fontSize:11, fontWeight:700, color:'#7c3aed', background:'rgba(124,58,237,0.12)', borderRadius:999, padding:'4px 9px' }}>
+                        <span className="ops-pill" style={{ color:'#7c3aed', background:'rgba(124,58,237,0.12)' }}>
                           Auto-doc
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize:11, color:'#2563EB', marginTop:4 }}>{requestTypeLabel(row.request_type)}</div>
-                    {row.details && <div style={{ fontSize:12, color:'#6b6860', marginTop:8, lineHeight:1.5 }}>{row.details}</div>}
+                    <div style={{ ...copy, marginTop: 6, color: 'var(--ws-accent)' }}>{requestTypeLabel(row.request_type)}</div>
+                    {row.details && <div style={{ ...copy, marginTop: 8, lineHeight: 1.6 }}>{row.details}</div>}
                   </div>
-                  <div style={{ fontSize:11, color:'#6b6860', textAlign:'right' }}>
+
+                  <div style={dateCol}>
                     <div>Creation: {formatDate(row.created_at)}</div>
                     <div>Mise a jour: {formatDate(row.updated_at)}</div>
                     {row.validated_at && <div>Validation: {formatDate(row.validated_at)}</div>}
@@ -282,16 +361,16 @@ export default function DemandesPage() {
                 <ProgressLine status={row.status} />
 
                 {canManage ? (
-                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
-                    {row.status === 'pending' && <button style={btn} onClick={() => updateStatus(row, 'in_review')} disabled={saving}>Prendre en charge</button>}
-                    {row.status === 'in_review' && <button style={{ ...btn, background:'#0d9488' }} onClick={() => updateStatus(row, 'approved')} disabled={saving}>Valider</button>}
-                    {['approved', 'in_progress'].includes(row.status) && <button style={{ ...btn, background:'#7c3aed' }} onClick={() => updateStatus(row, 'ready')} disabled={saving}>Marquer prete</button>}
-                    {row.status === 'approved' && <button style={{ ...btn, background:'#2563EB' }} onClick={() => updateStatus(row, 'in_progress')} disabled={saving}>Lancer preparation</button>}
-                    {row.status === 'ready' && <button style={{ ...btn, background:'#16a34a' }} onClick={() => updateStatus(row, 'delivered')} disabled={saving}>Livrer au client</button>}
-                    {!['delivered', 'rejected'].includes(row.status) && <button style={{ ...btn, background:'#dc2626' }} onClick={() => updateStatus(row, 'rejected')} disabled={saving}>Refuser</button>}
+                  <div style={actionRow}>
+                    {row.status === 'pending' && <button style={button} onClick={() => updateStatus(row, 'in_review')} disabled={saving}>Prendre en charge</button>}
+                    {row.status === 'in_review' && <button style={{ ...button, background:'#0d9488' }} onClick={() => updateStatus(row, 'approved')} disabled={saving}>Valider</button>}
+                    {['approved', 'in_progress'].includes(row.status) && <button style={{ ...button, background:'#7c3aed' }} onClick={() => updateStatus(row, 'ready')} disabled={saving}>Marquer prete</button>}
+                    {row.status === 'approved' && <button style={button} onClick={() => updateStatus(row, 'in_progress')} disabled={saving}>Lancer preparation</button>}
+                    {row.status === 'ready' && <button style={{ ...button, background:'#16a34a' }} onClick={() => updateStatus(row, 'delivered')} disabled={saving}>Livrer au client</button>}
+                    {!['delivered', 'rejected'].includes(row.status) && <button style={{ ...button, background:'#dc2626' }} onClick={() => updateStatus(row, 'rejected')} disabled={saving}>Refuser</button>}
                   </div>
                 ) : (
-                  <div style={{ marginTop:12, fontSize:12, color:'#6b6860' }}>
+                  <div style={copy}>
                     {row.status === 'pending' && 'Votre demande a bien ete transmise a l equipe comptable.'}
                     {row.status === 'in_review' && 'La demande est en cours d analyse par le cabinet.'}
                     {row.status === 'approved' && 'La demande a ete validee et va etre traitee.'}
@@ -301,11 +380,11 @@ export default function DemandesPage() {
                     {row.status === 'rejected' && 'La demande a ete refusee. Contactez le cabinet si besoin.'}
                   </div>
                 )}
-              </div>
+              </article>
             ))}
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }

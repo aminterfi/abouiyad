@@ -5,9 +5,72 @@ import { supabase } from '@/lib/supabase'
 import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 
-const card: React.CSSProperties = { background:'#fff', border:'1px solid rgba(0,0,0,0.08)', borderRadius:10, padding:16 }
-const inp: React.CSSProperties = { width:'100%', padding:'10px 12px', border:'1px solid rgba(0,0,0,0.14)', borderRadius:7, background:'#f8f7f5', fontFamily:'inherit' }
-const btn: React.CSSProperties = { border:'none', background:'#2563EB', color:'#fff', borderRadius:7, padding:'10px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }
+const page: React.CSSProperties = { display:'grid', gap:18 }
+const grid: React.CSSProperties = { display:'grid', gap:18 }
+const card: React.CSSProperties = {
+  background:'var(--ws-panel)',
+  border:'1px solid var(--ws-border)',
+  borderRadius:14,
+  padding:18,
+  display:'grid',
+  gap:14,
+}
+const softCard: React.CSSProperties = { ...card, background:'var(--ws-panel-2)' }
+const head: React.CSSProperties = { display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }
+const titleText: React.CSSProperties = { fontSize:15, fontWeight:800 }
+const copy: React.CSSProperties = { fontSize:12, color:'var(--ws-muted)' }
+const fieldGrid: React.CSSProperties = { display:'grid', gap:10 }
+const field: React.CSSProperties = {
+  width:'100%',
+  minHeight:42,
+  padding:'10px 12px',
+  borderRadius:10,
+  border:'1px solid var(--ws-border)',
+  background:'var(--ws-panel-2)',
+  color:'var(--ws-text)',
+  font:'inherit',
+}
+const textarea: React.CSSProperties = { ...field, minHeight:100, resize:'vertical' }
+const actions: React.CSSProperties = { display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }
+const actionRow: React.CSSProperties = { display:'flex', gap:8, flexWrap:'wrap' }
+const button: React.CSSProperties = {
+  appearance:'none',
+  border:'1px solid transparent',
+  background:'linear-gradient(135deg, var(--ws-accent), var(--ws-accent-2))',
+  color:'#fff',
+  borderRadius:10,
+  minHeight:40,
+  padding:'10px 14px',
+  font:'inherit',
+  fontSize:12,
+  fontWeight:700,
+  cursor:'pointer',
+}
+const statsGrid: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:10 }
+const stat: React.CSSProperties = { padding:14, borderRadius:12, border:'1px solid var(--ws-border)', background:'var(--ws-panel-2)' }
+const statLabel: React.CSSProperties = { fontSize:11, color:'var(--ws-muted)' }
+const statValue: React.CSSProperties = { marginTop:6, fontSize:24, fontWeight:800 }
+const filterRow: React.CSSProperties = { display:'flex', gap:8, flexWrap:'wrap' }
+const list: React.CSSProperties = { display:'grid', gap:10 }
+const item: React.CSSProperties = { border:'1px solid var(--ws-border)', borderRadius:12, padding:14, background:'var(--ws-panel-2)', display:'grid', gap:12 }
+const itemHead: React.CSSProperties = { display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }
+const itemMain: React.CSSProperties = { minWidth:0, flex:1 }
+const badges: React.CSSProperties = { display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }
+const dateCol: React.CSSProperties = { fontSize:12, color:'var(--ws-muted)', textAlign:'right', display:'grid', gap:4 }
+
+function filterButton(active: boolean): React.CSSProperties {
+  return {
+    appearance:'none',
+    border:'1px solid var(--ws-border)',
+    background: active ? '#f8fafc' : 'var(--ws-panel-2)',
+    color: active ? '#0a0f17' : 'var(--ws-text)',
+    borderRadius:999,
+    padding:'7px 11px',
+    font:'inherit',
+    fontSize:12,
+    cursor:'pointer',
+  }
+}
 
 const TICKET_STATUS: Record<string, { label: string; color: string; bg: string }> = {
   open: { label:'Ouvert', color:'#b45309', bg:'rgba(245,158,11,0.12)' },
@@ -17,20 +80,20 @@ const TICKET_STATUS: Record<string, { label: string; color: string; bg: string }
   closed: { label:'Fermee', color:'#166534', bg:'rgba(34,197,94,0.14)' },
 }
 
-const PRIORITY_META: Record<string, string> = {
-  low: '#6b6860',
-  normal: '#2563EB',
-  high: '#d97706',
-  urgent: '#dc2626',
+const PRIORITY_META: Record<string, { color: string; bg: string }> = {
+  low: { color:'#6b6860', bg:'rgba(107,104,96,0.10)' },
+  normal: { color:'#2563EB', bg:'rgba(37,99,235,0.10)' },
+  high: { color:'#d97706', bg:'rgba(217,119,6,0.12)' },
+  urgent: { color:'#dc2626', bg:'rgba(220,38,38,0.12)' },
 }
 
 function badge(status: string) {
   const meta = TICKET_STATUS[status] || TICKET_STATUS.open
-  return <span style={{ padding:'4px 9px', borderRadius:999, fontSize:11, fontWeight:700, color:meta.color, background:meta.bg }}>{meta.label}</span>
+  return <span className="ops-pill" style={{ color:meta.color, background:meta.bg }}>{meta.label}</span>
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   return new Date(value).toLocaleString('fr-DZ')
 }
 
@@ -47,7 +110,7 @@ export default function TicketsPage() {
   const [user, setUser] = useState<any>(null)
 
   const [mode, setMode] = useState<'client' | 'cabinet'>('client')
-  const canManage = mode === 'cabinet' || user?.is_platform_admin === true
+  const canManage = mode === 'cabinet'
 
   async function load() {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
@@ -69,6 +132,34 @@ export default function TicketsPage() {
   }
 
   useEffect(() => { load() }, [pathname])
+
+  useEffect(() => {
+    let active = true
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    async function setup() {
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+      if (!currentUser.company_id) return
+      const scope = await loadOperationalScope(currentUser.company_id, pathname)
+      if (!active) return
+      const allowedCompanyIds = new Set(scope.companyIds)
+
+      channel = supabase
+        .channel(`tickets-live-${pathname}-${currentUser.id || currentUser.company_id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, (payload: any) => {
+          const companyId = payload?.new?.company_id || payload?.old?.company_id
+          if (!companyId || !allowedCompanyIds.has(companyId)) return
+          load()
+        })
+        .subscribe()
+    }
+
+    setup()
+    return () => {
+      active = false
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [pathname])
 
   async function createTicket() {
     setError('')
@@ -103,79 +194,85 @@ export default function TicketsPage() {
     load()
   }
 
-  const filtered = tickets.filter(ticket => filter === 'all' || ticket.status === filter)
+  const filtered = tickets.filter((ticket) => filter === 'all' || ticket.status === filter)
   const companyLookup = Object.fromEntries(managedCompanies.map((company: any) => [company.id, company]))
+  const openCount = tickets.filter((ticket) => ticket.status === 'open').length
+  const progressCount = tickets.filter((ticket) => ticket.status === 'in_progress').length
+  const waitingCount = tickets.filter((ticket) => ticket.status === 'waiting_client').length
+  const resolvedCount = tickets.filter((ticket) => ['resolved', 'closed'].includes(ticket.status)).length
 
   return (
-    <div style={{ display:'grid', gap:14 }}>
-      <div style={{ display:'grid', gridTemplateColumns: canManage ? '1.05fr .95fr' : '1fr', gap:14 }}>
-        <div style={card}>
-          <div style={{ fontWeight:700, marginBottom:12 }}>Nouveau ticket client</div>
-          <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:10, marginBottom:10 }}>
-            <input style={inp} value={title} onChange={e=>setTitle(e.target.value)} placeholder="Objet du ticket" />
-            <select style={inp} value={priority} onChange={e=>setPriority(e.target.value)}>
+    <div style={page}>
+      <div style={{ ...grid, gridTemplateColumns: canManage ? 'minmax(0, 1.05fr) minmax(320px, 0.95fr)' : '1fr' }}>
+        <section style={card}>
+          <div style={head}>
+            <div>
+              <div style={titleText}>Nouveau ticket client</div>
+              <div style={copy}>Le support client reste trace et visible dans le workspace.</div>
+            </div>
+            {badge('open')}
+          </div>
+
+          <div style={{ ...fieldGrid, gridTemplateColumns:'2fr 1fr' }}>
+            <input style={field} value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Objet du ticket" />
+            <select style={field} value={priority} onChange={(e)=>setPriority(e.target.value)}>
               <option value="low">Priorite basse</option>
               <option value="normal">Priorite normale</option>
               <option value="high">Priorite haute</option>
               <option value="urgent">Urgent</option>
             </select>
           </div>
-          <textarea style={{ ...inp, minHeight:92 }} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Decrivez la demande ou le probleme..." />
-          {error && <div style={{ marginTop:10, color:'#dc2626', fontSize:12 }}>{error}</div>}
-          <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:12, color:'#6b6860' }}>Le client voit ensuite le statut du ticket.</div>
-            <button style={btn} onClick={createTicket} disabled={saving}>{saving ? '...' : 'Creer ticket'}</button>
+
+          <textarea style={textarea} value={description} onChange={(e)=>setDescription(e.target.value)} placeholder="Decrivez la demande ou le probleme..." />
+
+          {error && <div className="docs-error"><span>{error}</span></div>}
+
+          <div style={actions}>
+            <div style={copy}>Le client voit ensuite le statut du ticket.</div>
+            <button style={button} onClick={createTicket} disabled={saving}>{saving ? '...' : 'Creer ticket'}</button>
           </div>
-        </div>
+        </section>
 
         {canManage && (
-          <div style={{ ...card, display:'grid', gap:10 }}>
-            <div style={{ fontWeight:700 }}>Vue support</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>Ouverts</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{tickets.filter(t => t.status === 'open').length}</div>
+          <section style={softCard}>
+            <div style={titleText}>Vue support</div>
+            <div style={statsGrid}>
+              <div style={stat}>
+                <div style={statLabel}>Ouverts</div>
+                <div style={statValue}>{openCount}</div>
               </div>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>En cours</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{tickets.filter(t => t.status === 'in_progress').length}</div>
+              <div style={stat}>
+                <div style={statLabel}>En cours</div>
+                <div style={statValue}>{progressCount}</div>
               </div>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>Attente client</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{tickets.filter(t => t.status === 'waiting_client').length}</div>
+              <div style={stat}>
+                <div style={statLabel}>Attente client</div>
+                <div style={statValue}>{waitingCount}</div>
               </div>
-              <div style={{ background:'#f8f7f5', borderRadius:8, padding:12 }}>
-                <div style={{ fontSize:11, color:'#6b6860' }}>Resolus</div>
-                <div style={{ fontSize:24, fontWeight:800 }}>{tickets.filter(t => ['resolved', 'closed'].includes(t.status)).length}</div>
+              <div style={stat}>
+                <div style={statLabel}>Resolus</div>
+                <div style={statValue}>{resolvedCount}</div>
               </div>
             </div>
-          </div>
+            <div style={copy}>Pilotez le support avec des statuts visibles par le client.</div>
+          </section>
         )}
       </div>
 
-      <div style={card}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>
+      <section style={card}>
+        <div style={head}>
           <div>
-            <div style={{ fontWeight:700 }}>{canManage ? 'Tickets clients a traiter' : 'Suivi des tickets'}</div>
-            <div style={{ fontSize:12, color:'#6b6860', marginTop:4 }}>
+            <div style={titleText}>{canManage ? 'Tickets clients a traiter' : 'Suivi des tickets'}</div>
+            <div style={copy}>
               {canManage ? 'Pilotez le support avec des statuts visibles par le client.' : 'Suivez la prise en charge de vos tickets.'}
             </div>
           </div>
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-            {['all', 'open', 'in_progress', 'waiting_client', 'resolved', 'closed'].map(value => (
+          <div style={filterRow}>
+            {['all', 'open', 'in_progress', 'waiting_client', 'resolved', 'closed'].map((value) => (
               <button
                 key={value}
                 onClick={() => setFilter(value)}
-                style={{
-                  border:'1px solid rgba(0,0,0,0.12)',
-                  background: filter === value ? '#1a1916' : '#fff',
-                  color: filter === value ? '#fff' : '#1a1916',
-                  borderRadius:999,
-                  padding:'7px 10px',
-                  fontSize:12,
-                  cursor:'pointer',
-                  fontFamily:'inherit'
-                }}
+                style={filterButton(filter === value)}
               >
                 {value === 'all' ? 'Tout' : TICKET_STATUS[value]?.label || value}
               </button>
@@ -184,42 +281,43 @@ export default function TicketsPage() {
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ fontSize:13, color:'#6b6860' }}>Aucun ticket pour ce filtre.</div>
+          <div style={copy}>Aucun ticket pour ce filtre.</div>
         ) : (
-          <div style={{ display:'grid', gap:10 }}>
-            {filtered.map((ticket:any) => (
-              <div key={ticket.id} style={{ border:'1px solid rgba(0,0,0,0.08)', borderRadius:10, padding:14 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
-                  <div style={{ minWidth:0, flex:1 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                      <div style={{ fontWeight:700 }}>{ticket.title}</div>
+          <div style={list}>
+            {filtered.map((ticket: any) => (
+              <article key={ticket.id} style={item}>
+                <div style={itemHead}>
+                  <div style={itemMain}>
+                    <div style={badges}>
+                      <div style={{ ...titleText, fontSize: 14 }}>{ticket.title}</div>
                       {badge(ticket.status)}
                       {mode === 'cabinet' && ticket.company_id && companyLookup[ticket.company_id]?.name && (
-                        <span style={{ fontSize:11, fontWeight:700, color:'#2563EB', background:'rgba(37,99,235,0.10)', borderRadius:999, padding:'4px 9px' }}>
+                        <span className="ops-pill" style={{ color:'#2563EB', background:'rgba(37,99,235,0.10)' }}>
                           {companyLookup[ticket.company_id].name}
                         </span>
                       )}
-                      <span style={{ fontSize:11, fontWeight:700, color:PRIORITY_META[ticket.priority] || '#2563EB', background:'rgba(0,0,0,0.04)', borderRadius:999, padding:'4px 9px' }}>
+                      <span className="ops-pill" style={{ color:PRIORITY_META[ticket.priority]?.color || '#2563EB', background:PRIORITY_META[ticket.priority]?.bg || 'rgba(37,99,235,0.10)' }}>
                         {ticket.priority}
                       </span>
                     </div>
-                    {ticket.description && <div style={{ fontSize:12, color:'#6b6860', marginTop:8, lineHeight:1.5 }}>{ticket.description}</div>}
+                    {ticket.description && <div style={{ ...copy, marginTop: 8, lineHeight: 1.6 }}>{ticket.description}</div>}
                   </div>
-                  <div style={{ fontSize:11, color:'#6b6860', textAlign:'right' }}>
+
+                  <div style={dateCol}>
                     <div>Creation: {formatDate(ticket.created_at)}</div>
                     <div>Mise a jour: {formatDate(ticket.updated_at)}</div>
                   </div>
                 </div>
 
                 {canManage ? (
-                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
-                    {ticket.status === 'open' && <button style={btn} onClick={() => updateStatus(ticket, 'in_progress')} disabled={saving}>Prendre en charge</button>}
-                    {['open', 'in_progress'].includes(ticket.status) && <button style={{ ...btn, background:'#7c3aed' }} onClick={() => updateStatus(ticket, 'waiting_client')} disabled={saving}>Attente client</button>}
-                    {['open', 'in_progress', 'waiting_client'].includes(ticket.status) && <button style={{ ...btn, background:'#16a34a' }} onClick={() => updateStatus(ticket, 'resolved')} disabled={saving}>Marquer resolu</button>}
-                    {ticket.status === 'resolved' && <button style={{ ...btn, background:'#166534' }} onClick={() => updateStatus(ticket, 'closed')} disabled={saving}>Fermer</button>}
+                  <div style={actionRow}>
+                    {ticket.status === 'open' && <button style={button} onClick={() => updateStatus(ticket, 'in_progress')} disabled={saving}>Prendre en charge</button>}
+                    {['open', 'in_progress'].includes(ticket.status) && <button style={{ ...button, background:'#7c3aed' }} onClick={() => updateStatus(ticket, 'waiting_client')} disabled={saving}>Attente client</button>}
+                    {['open', 'in_progress', 'waiting_client'].includes(ticket.status) && <button style={{ ...button, background:'#16a34a' }} onClick={() => updateStatus(ticket, 'resolved')} disabled={saving}>Marquer resolu</button>}
+                    {ticket.status === 'resolved' && <button style={{ ...button, background:'#1f2937' }} onClick={() => updateStatus(ticket, 'closed')} disabled={saving}>Fermer</button>}
                   </div>
                 ) : (
-                  <div style={{ marginTop:12, fontSize:12, color:'#6b6860' }}>
+                  <div style={copy}>
                     {ticket.status === 'open' && 'Le ticket a bien ete recu par le cabinet.'}
                     {ticket.status === 'in_progress' && 'Le ticket est en cours de traitement.'}
                     {ticket.status === 'waiting_client' && 'Le cabinet attend un retour ou un document de votre part.'}
@@ -227,11 +325,11 @@ export default function TicketsPage() {
                     {ticket.status === 'closed' && 'Le ticket est cloture.'}
                   </div>
                 )}
-              </div>
+              </article>
             ))}
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }
