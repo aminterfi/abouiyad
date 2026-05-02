@@ -57,7 +57,7 @@ function cabinetNav(slug: string, isPlatformAdmin: boolean): NavItem[] {
 
 function clientNav(slug: string): NavItem[] {
   return [
-    { section: 'Portail client', label: 'Tableau de bord', href: `/${slug}/client`, icon: LayoutDashboard },
+    { section: 'Espace client', label: 'Tableau de bord', href: `/${slug}/client`, icon: LayoutDashboard },
     { section: 'Facturation', label: 'Factures', href: `/${slug}/client/factures`, icon: Receipt },
     { section: 'Facturation', label: 'Paiements', href: `/${slug}/client/paiements`, icon: WalletCards },
     { section: 'Facturation', label: 'Clients', href: `/${slug}/client/clients`, icon: Users },
@@ -80,7 +80,7 @@ function buildNav(slug: string, shell: ShellKey, isPlatformAdmin: boolean) {
 function shellTitle(shell: ShellKey) {
   if (shell === 'client') {
     return {
-      title: 'Portail client',
+      title: 'Espace client',
       subtitle: 'Facturation, paiements, stock et collaboration au quotidien.',
     }
   }
@@ -217,7 +217,7 @@ export default function WorkspaceShell({
         <div className="ws-sidebar-foot">
           <div className="ws-user-name">{user.full_name}</div>
           <div className="ws-user-meta">
-            {resolvedShell === 'client' ? 'Version client' : isPlatformAdmin ? 'Cabinet / administration' : 'Cabinet'}
+            {resolvedShell === 'client' ? 'Espace client' : isPlatformAdmin ? 'Cabinet / administration' : 'Cabinet'}
           </div>
           <button className="ws-logout-button" onClick={logout}>
             <LogOut size={16} />
