@@ -27,7 +27,7 @@ export default function CabinetHomePage() {
 
       setLoading(true)
       try {
-        const managed = await loadManagedClientWorkspaces(user.company_id)
+        const managed = await loadManagedClientWorkspaces(user.company_id, slug)
         const ids = managed.map((company: any) => company.id).filter(Boolean)
         setCompanies(managed)
 

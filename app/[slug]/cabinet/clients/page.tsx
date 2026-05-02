@@ -24,7 +24,7 @@ export default function CabinetClientsPage() {
       setLoading(true)
 
       try {
-        const managed = await loadManagedClientWorkspaces(user.company_id)
+        const managed = await loadManagedClientWorkspaces(user.company_id, slug)
         const enriched = await Promise.all(
           managed.map(async (company: any) => {
             const [{ count: demandes }, { count: tickets }, { data: bills }] = await Promise.all([

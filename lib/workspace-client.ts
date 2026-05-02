@@ -1,7 +1,7 @@
 'use client'
 
 import { supabase } from '@/lib/supabase'
-import type { ShellKey } from '@/lib/workspace'
+import { isManagementSlug, type ShellKey } from '@/lib/workspace'
 
 export function getShellFromPathname(pathname: string): ShellKey {
   if (pathname.includes('/admin-rs')) return 'admin-rs'
@@ -14,12 +14,38 @@ export function isCabinetLikeShell(pathname: string) {
   return shell === 'cabinet' || shell === 'admin-rs'
 }
 
-export async function loadManagedClientWorkspaces(cabinetId: string) {
+function getSlugFromPathname(pathname: string) {
+  const parts = pathname.split('/').filter(Boolean)
+  return parts[0] || ''
+}
+
+async function loadAllCompaniesForManagementCabinet(cabinetId: string) {
+  const { data, error } = await supabase
+    .from('companies')
+    .select('id,name,slug,workspace_type,parent_cabinet_id')
+    .neq('id', cabinetId)
+    .neq('slug', 'rs')
+    .order('name', { ascending: true })
+
+  if (error) throw error
+
+  return (data || []).map((company: any) => ({
+    ...company,
+    owner_email: null,
+    active_modules: [],
+  }))
+}
+
+export async function loadManagedClientWorkspaces(cabinetId: string, cabinetSlug?: string) {
+  if (isManagementSlug(cabinetSlug)) {
+    return loadAllCompaniesForManagementCabinet(cabinetId)
+  }
+
   const { data, error } = await supabase.rpc('list_managed_client_workspaces', {
     p_cabinet_id: cabinetId,
   })
 
-  if (!error) return data || []
+  if (!error && (data || []).length > 0) return data || []
 
   const { data: companies, error: companyError } = await supabase
     .from('companies')
@@ -47,7 +73,7 @@ export async function loadOperationalScope(companyId: string, pathname: string) 
 
   let companies: any[] = []
   try {
-    companies = await loadManagedClientWorkspaces(companyId)
+    companies = await loadManagedClientWorkspaces(companyId, getSlugFromPathname(pathname))
   } catch {
     companies = []
   }
