@@ -307,6 +307,27 @@ export default function WorkspaceShell({
       notificationBootedRef.current = true
     }
 
+    async function handleNotificationEvent(payload: any) {
+      const row = payload?.new || payload?.old || {}
+      const context = notifContextRef.current
+      if (!context) return
+      if (!isNotificationEventRelevant(row.company_id, context)) return
+
+      const expectedAudience = context.isCabinet ? 'cabinet' : 'client'
+      if (row.audience !== expectedAudience) return
+
+      const items = await loadWorkspaceNotifications(user, pathname)
+      if (!active) return
+      setNotifications(items)
+
+      if (notificationBootedRef.current && payload?.eventType === 'INSERT' && items[0]) {
+        const eventKind: NotificationEventKind = context.isCabinet ? 'create' : 'status_update'
+        playNotificationSound(eventKind, Boolean(context.isCabinet))
+        maybeShowBrowserNotification(items[0])
+      }
+      notificationBootedRef.current = true
+    }
+
     function enableRealtimeFeatures() {
       ensureAudioReady()
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
@@ -324,6 +345,7 @@ export default function WorkspaceShell({
         .channel(`workspace-notifs-${user.id}-${slug}-${resolvedShell}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, (payload) => handleRealtimeEvent('service_requests', payload))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, (payload) => handleRealtimeEvent('support_tickets', payload))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_notifications' }, handleNotificationEvent)
         .subscribe()
 
       window.addEventListener('pointerdown', handleFirstPointerDown, { once: true })

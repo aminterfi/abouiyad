@@ -88,7 +88,7 @@ export async function loadWorkspaceNotificationContext(user: any, pathname: stri
   if (!user?.company_id) return null
 
   const scope = await loadOperationalScope(user.company_id, pathname)
-  const isCabinet = scope.mode === 'cabinet' || user?.is_platform_admin === true
+  const isCabinet = scope.mode === 'cabinet'
   const slug = pathname.split('/').filter(Boolean)[0] || ''
   const routeBase = `/${slug}/${isCabinet ? 'cabinet' : 'client'}`
   const companyLookup = Object.fromEntries(
@@ -286,10 +286,23 @@ type CreateWorkspaceNotificationPayload = {
 
 export async function createWorkspaceNotification(payload: CreateWorkspaceNotificationPayload) {
   try {
-    await fetch('/api/workspace/notifications', {
+    const response = await fetch('/api/workspace/notifications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    })
+    if (response.ok) return
+  } catch {}
+
+  try {
+    await supabase.from('workspace_notifications').insert({
+      company_id: payload.companyId,
+      audience: payload.audience,
+      kind: payload.kind,
+      entity_id: payload.entityId || null,
+      title: payload.title,
+      message: payload.message,
+      status: payload.status || null,
     })
   } catch {
     // Notifications should never block the main business action.
