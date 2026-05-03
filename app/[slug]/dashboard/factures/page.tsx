@@ -3,6 +3,21 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { useRealtime } from '@/lib/useRealtime'
+import {
+  getCommercialDocumentMeta,
+  getDeclarationMeta,
+  getDefaultCommercialStatus,
+  getDocumentReferenceLabel,
+  getNextCommercialDocumentTypes,
+  type CommercialDocumentType,
+} from '@/lib/commercial-documents'
+import {
+  insertBillItemsWithFallback,
+  insertBillWithFallback,
+  normalizeCommercialBill,
+  normalizeCommercialBillItem,
+  updateBillWithFallback,
+} from '@/lib/commercial-bill-compat'
 
 function dzd(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:2})+' DZD' }
 function dzdShort(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:0})+' DZD' }
@@ -213,13 +228,19 @@ async function generatePDF(bill: any, settings: any) {
   const tva = tvaEnabled ? Math.round(afterDiscount * tvaRate / 100 * 100) / 100 : 0
   const color = s.primary_color || '#2563EB'
   const company = s.company_name || 'RSS'
+  const documentMeta = getCommercialDocumentMeta(bill.document_type)
+  const declarationMeta = getDeclarationMeta(bill.client_declared)
+  const referenceLabel = getDocumentReferenceLabel(bill.document_type)
+  const dueLabel = bill.document_type === 'invoice' ? "Date d'échéance" : 'Date de suivi'
+  const recipientLabel = bill.document_type === 'quote' ? 'Proposé à' : bill.document_type === 'delivery_note' ? 'Livré à' : 'Client'
+  const quantityLabel = bill.document_type === 'delivery_note' ? 'Qté livrée' : 'Qté'
   const due = bill.due_date ? new Date(bill.due_date).toLocaleDateString('fr-DZ', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
   const showNotes = bill.show_notes_pdf !== false && bill.notes
   const showTerms = bill.show_terms_pdf !== false && bill.terms
   const fmt = (v: number) => v.toLocaleString('fr-DZ', { minimumFractionDigits: 2 })
 
   const html = `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="UTF-8"><title>${bill.invoice_number}</title>
+<html lang="fr"><head><meta charset="UTF-8"><title>${documentMeta.label} ${bill.invoice_number}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -333,7 +354,7 @@ tbody tr:last-child td{border-bottom:none}
       </div>
       <div class="doc-label">
         <div class="type">Document</div>
-        <h1>FACTURE</h1>
+        <h1>${documentMeta.label.toUpperCase()}</h1>
         <div class="num">${bill.invoice_number}</div>
       </div>
     </div>
@@ -543,6 +564,7 @@ export default function FacturesPage() {
   const [settings, setSettings] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('tous')
+  const [documentFilter, setDocumentFilter] = useState<'all' | CommercialDocumentType>('all')
   const [search, setSearch] = useState('')
   const [period, setPeriod] = useState('tout')
   const [view, setView] = useState<'list'|'new'|'pay'|'detail'>('list')
@@ -593,7 +615,11 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
       supabase.from('products').select('*').eq('company_id', companyId).eq('is_available',true).eq('is_archived',false),
       supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
     ])
-    setBills(b||[]); setClients(c||[]); setProducts(p||[]); setSettings(s||{})
+    setBills((b || []).map((bill: any) => ({
+      ...normalizeCommercialBill(bill),
+      commercial_status: bill?.commercial_status || getDefaultCommercialStatus(bill?.document_type || 'invoice'),
+    })))
+    setClients(c||[]); setProducts(p||[]); setSettings(s||{})
     setLoading(false)
   }
 
@@ -654,16 +680,26 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
     const rem = selectedBill.total_amount - selectedBill.paid_amount
     if (amt>rem) { setError(`Montant > solde restant (${dzd(rem)})`); return }
     setSaving(true)
-    const user = JSON.parse(localStorage.getItem('user')||'{}')
-    const { data: newPay } = await supabase.from('payments').insert({
-      bill_id: selectedBill.id, amount: amt, method: paiForm.method,
-      notes: paiForm.note, created_by: user.id, company_id: user.company_id
-    }).select().single()
-    setTimeout(() => {
-      if (newPay) generateReceiptPDF({...newPay, created_at:new Date().toISOString()}, {...selectedBill, paid_amount:selectedBill.paid_amount+amt}, settings)
-    }, 300)
-    setPaiForm({ amount:'', method:'Virement CPA', note:'' })
-    setView('list'); setSelectedBill(null); fetchAll()
+    try {
+      const user = JSON.parse(localStorage.getItem('user')||'{}')
+      const { data: inserted, error } = await supabase.from('payments').insert([{
+        bill_id: selectedBill.id, amount: amt, method: paiForm.method,
+        notes: paiForm.note, created_by: user.id, company_id: user.company_id
+      }]).select('*')
+      if (error) throw error
+      const newPay = Array.isArray(inserted) ? inserted[0] : inserted
+      setTimeout(() => {
+        generateReceiptPDF(
+          { ...(newPay || {}), amount: amt, method: paiForm.method, notes: paiForm.note, created_at: newPay?.created_at || new Date().toISOString() },
+          { ...selectedBill, paid_amount:selectedBill.paid_amount+amt },
+          settings,
+        )
+      }, 300)
+      setPaiForm({ amount:'', method:'Virement CPA', note:'' })
+      setView('list'); setSelectedBill(null); fetchAll()
+    } catch (e: any) {
+      setError(e?.message || 'Impossible d’enregistrer ce paiement.')
+    }
     setSaving(false)
   }
 
@@ -672,9 +708,9 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
       supabase.from('bill_items').select('*, products(name)').eq('bill_id',bill.id),
       supabase.from('payments').select('*').eq('bill_id',bill.id).order('created_at',{ascending:true})
     ])
-    setDetailItems(items||[])
+    setDetailItems((items || []).map((item: any) => normalizeCommercialBillItem(item)))
     setDetailPayments(pays||[])
-    setSelectedBill(bill)
+    setSelectedBill(normalizeCommercialBill(bill))
     setView('detail')
   }
 
@@ -692,9 +728,91 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
     fetchAll()
   }
 
+  async function toggleDeclaration(bill: any, declared: boolean) {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const { error } = await updateBillWithFallback(supabase, bill.id, {
+      client_declared: declared,
+      client_declared_at: declared ? new Date().toISOString() : null,
+      client_declared_by: declared ? user.id : null,
+    })
+    if (error) {
+      setError(error.message || 'Impossible de mettre à jour la déclaration client.')
+      return
+    }
+    fetchAll()
+  }
+
+  async function convertBill(bill: any, targetType: CommercialDocumentType) {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const { data: sourceItems } = await supabase.from('bill_items').select('*').eq('bill_id', bill.id)
+    const billResult = await insertBillWithFallback(supabase, {
+      client_id: bill.client_id,
+      order_number: bill.order_number || null,
+      due_date: bill.due_date || null,
+      notes: bill.notes || null,
+      terms: bill.terms || null,
+      discount_enabled: bill.discount_enabled === true,
+      discount_value: Number(bill.discount_value || 0),
+      tva_enabled: bill.tva_enabled !== false,
+      show_notes_pdf: bill.show_notes_pdf !== false,
+      show_terms_pdf: bill.show_terms_pdf === true,
+      total_amount: Number(bill.total_amount || 0),
+      subtotal: Number(bill.subtotal || 0),
+      tva_amount: Number(bill.tva_amount || 0),
+      created_by: user.id,
+      company_id: user.company_id,
+      document_type: targetType,
+      commercial_status: getDefaultCommercialStatus(targetType),
+      source_bill_id: bill.id,
+      client_declared: false,
+      client_declared_at: null,
+      client_declaration_note: null,
+      invoice_policy: targetType === 'invoice' ? 'delivered' : 'ordered',
+    })
+    const createdBill = billResult.data
+    if (billResult.error || !createdBill) {
+      setError(billResult.error?.message || 'Impossible de convertir ce document.')
+      return
+    }
+
+    if ((sourceItems || []).length > 0) {
+      const { error: itemError } = await insertBillItemsWithFallback(supabase, (sourceItems || []).map((item: any) => ({
+        bill_id: createdBill.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        ordered_quantity: item.ordered_quantity || item.quantity,
+        delivered_quantity: item.delivered_quantity || item.quantity,
+        unit_price: item.unit_price,
+        discount: item.discount || 0,
+        total: item.total,
+        item_type: item.item_type || 'product',
+        name_snapshot: item.name_snapshot || null,
+        source_item_id: item.id,
+        created_by: user.id,
+        company_id: user.company_id,
+      })))
+      if (itemError) {
+        setError(itemError.message || 'Impossible de copier les lignes du document.')
+        return
+      }
+    }
+
+    fetchAll()
+  }
+
   function exportExcel() {
-    const headers = ['N° Facture','Client','Total TTC','Payé','Solde','Statut','Date']
-    const rows = filtered.map(b => [b.invoice_number, b.clients?.full_name, b.total_amount, b.paid_amount, b.total_amount-b.paid_amount, b.status, new Date(b.created_at).toLocaleDateString('fr-DZ')])
+    const headers = ['Référence','Type','Client','Déclaré','Total TTC','Payé','Solde','Statut','Date']
+    const rows = filtered.map(b => [
+      b.invoice_number,
+      getCommercialDocumentMeta(b.document_type).label,
+      b.clients?.full_name,
+      b.client_declared ? 'Oui' : 'Non',
+      b.total_amount,
+      b.paid_amount,
+      b.total_amount-b.paid_amount,
+      b.status,
+      new Date(b.created_at).toLocaleDateString('fr-DZ'),
+    ])
     const csv = [headers, ...rows].map(r => r.join(';')).join('\n')
     const blob = new Blob([`\uFEFF${csv}`], { type:'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -705,8 +823,10 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
 
   const filtered = bills.filter(b => {
     const ms = filter==='tous'||b.status===filter
-    const mq = !search || b.invoice_number?.toLowerCase().includes(search.toLowerCase()) || b.clients?.full_name?.toLowerCase().includes(search.toLowerCase())
-    return ms && mq
+    const md = documentFilter === 'all' || (b.document_type || 'invoice') === documentFilter
+    const docLabel = getCommercialDocumentMeta(b.document_type).label.toLowerCase()
+    const mq = !search || b.invoice_number?.toLowerCase().includes(search.toLowerCase()) || b.clients?.full_name?.toLowerCase().includes(search.toLowerCase()) || docLabel.includes(search.toLowerCase())
+    return ms && mq && md
   })
 
   const totalCA = filtered.reduce((s,b) => s + (b.total_amount||0), 0)
@@ -714,25 +834,36 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
   const totalUnpaid = totalCA - totalPaid
 
   if (view === 'detail' && selectedBill) {
+    const selectedMeta = getCommercialDocumentMeta(selectedBill.document_type)
+    const declarationMeta = getDeclarationMeta(selectedBill.client_declared)
+    const quantityLabel = selectedBill.document_type === 'delivery_note' ? 'Qté livrée' : 'Qté'
+    const canCollect = selectedBill.document_type === 'invoice'
     return (
       <div style={{minHeight:'100vh',background:'#f5f4f1',margin:-22,padding:0}}>
         <div style={{background:'#1a1916',padding:'0 28px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:50}}>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
             <button onClick={()=>{setView('list');setSelectedBill(null)}} style={{background:'rgba(255,255,255,0.08)',border:'none',color:'#fff',borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:13}}>← Retour</button>
-            <div style={{color:'#fff',fontSize:14,fontWeight:600}}>{selectedBill.invoice_number}</div>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <DocumentTypeBadge type={selectedBill.document_type} />
+              <div style={{color:'#fff',fontSize:14,fontWeight:600}}>{selectedBill.invoice_number}</div>
+            </div>
           </div>
           <div style={{display:'flex',gap:8}}>
+            <button style={btnG} onClick={()=>router.push(`/${slug}/dashboard/factures/nouvelle?edit=${selectedBill.id}`)}>Modifier</button>
             <button style={btnG} onClick={()=>generatePDF(selectedBill, settings)}>📄 PDF</button>
-            {selectedBill.status !== 'payé' && <button style={btnGr} onClick={()=>setView('pay')}>Encaisser</button>}
+            {canCollect && selectedBill.status !== 'payé' && <button style={btnGr} onClick={()=>setView('pay')}>Encaisser</button>}
           </div>
         </div>
         <div style={{maxWidth:1000,margin:'0 auto',padding:'28px 24px'}}>
           <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:12,padding:24,marginBottom:16,display:'flex',justifyContent:'space-between'}}>
             <div>
               <div style={{fontSize:24,fontWeight:700,fontFamily:'JetBrains Mono,monospace',color:'#2563EB'}}>{selectedBill.invoice_number}</div>
-              <div style={{fontSize:13,color:'#6b6860',marginTop:4}}>Émise le {new Date(selectedBill.created_at).toLocaleDateString('fr-DZ')}</div>
+              <div style={{fontSize:13,color:'#6b6860',marginTop:4}}>{selectedMeta.label} émis le {new Date(selectedBill.created_at).toLocaleDateString('fr-DZ')}</div>
             </div>
-            <StatusBadge s={selectedBill.status}/>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <DeclarationBadge declared={selectedBill.client_declared} />
+              <StatusBadge s={selectedBill.status}/>
+            </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:16}}>
             <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:20}}>
@@ -741,10 +872,24 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
               {selectedBill.clients?.phone && <div style={{fontSize:12,color:'#6b6860',marginTop:4}}>☎ {selectedBill.clients.phone}</div>}
             </div>
             <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:20}}>
-              <div style={{fontSize:11,fontWeight:700,color:'#2563EB',textTransform:'uppercase',marginBottom:10}}>Montants</div>
+              <div style={{fontSize:11,fontWeight:700,color:'#2563EB',textTransform:'uppercase',marginBottom:10}}>{canCollect ? 'Montants' : 'Suivi document'}</div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}><span>Total TTC</span><span style={{fontFamily:'JetBrains Mono,monospace'}}>{dzd(selectedBill.total_amount)}</span></div>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}><span>Encaissé</span><span style={{fontFamily:'JetBrains Mono,monospace',color:'#16a34a'}}>{dzd(selectedBill.paid_amount)}</span></div>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:15,fontWeight:700,borderTop:'1px solid rgba(0,0,0,0.08)',paddingTop:6,marginTop:6}}><span>Solde</span><span style={{fontFamily:'JetBrains Mono,monospace',color:selectedBill.total_amount-selectedBill.paid_amount>0?'#d97706':'#16a34a'}}>{dzd(selectedBill.total_amount-selectedBill.paid_amount)}</span></div>
+              {canCollect ? (
+                <>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}><span>Encaissé</span><span style={{fontFamily:'JetBrains Mono,monospace',color:'#16a34a'}}>{dzd(selectedBill.paid_amount)}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:15,fontWeight:700,borderTop:'1px solid rgba(0,0,0,0.08)',paddingTop:6,marginTop:6}}><span>Solde</span><span style={{fontFamily:'JetBrains Mono,monospace',color:selectedBill.total_amount-selectedBill.paid_amount>0?'#d97706':'#16a34a'}}>{dzd(selectedBill.total_amount-selectedBill.paid_amount)}</span></div>
+                </>
+              ) : (
+                <>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}><span>Déclaration client</span><span style={{color:declarationMeta.color,fontWeight:700}}>{declarationMeta.label}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}><span>Étape workflow</span><span style={{fontWeight:700}}>{selectedMeta.shortLabel}</span></div>
+                  {selectedBill.client_declaration_note ? (
+                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid rgba(0,0,0,0.08)',fontSize:12,color:'#6b6860',lineHeight:1.6}}>
+                      {selectedBill.client_declaration_note}
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
           {detailItems.length > 0 && (
@@ -892,20 +1037,20 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
     <div>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:12}}>
         <div>
-          <div style={{fontSize:17,fontWeight:600}}>Factures</div>
-          <div style={{fontSize:12,color:'#a8a69e',marginTop:2}}>{bills.length} facture(s)</div>
+          <div style={{fontSize:17,fontWeight:600}}>Documents commerciaux</div>
+          <div style={{fontSize:12,color:'#a8a69e',marginTop:2}}>{bills.length} document(s)</div>
         </div>
         <div style={{display:'flex',gap:8}}>
           <button style={btnG} onClick={exportExcel}>📊 Export</button>
-          <button style={btnP} onClick={()=>router.push(`/${slug}/dashboard/factures/nouvelle`)}>+ Nouvelle facture</button>
+          <button style={btnP} onClick={()=>router.push(`/${slug}/dashboard/factures/nouvelle`)}>+ Nouveau document</button>
         </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:16}}>
         {[
-          { label:'Factures', val:filtered.length, color:'#1a1916' },
+          { label:'Documents', val:filtered.length, color:'#1a1916' },
           { label:'CA total', val:dzd(totalCA), color:'#2563EB', mono:true },
           { label:'Encaissé', val:dzd(totalPaid), color:'#16a34a', mono:true },
-          { label:'Impayé', val:dzd(totalUnpaid), color:'#d97706', mono:true },
+          { label:'Non déclaré', val:bills.filter((b:any) => b.client_declared !== true).length, color:'#d97706' },
         ].map((s:any,i)=>(
           <div key={i} style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:'14px 18px'}}>
             <div style={{fontSize:11,fontWeight:600,color:'#a8a69e',textTransform:'uppercase',marginBottom:6}}>{s.label}</div>
@@ -918,32 +1063,48 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
         {['tous','impayé','partiel','payé'].map(f=>(
           <button key={f} onClick={()=>setFilter(f)} style={{...btnSm,border:'1px solid rgba(0,0,0,0.14)',background:filter===f?'#2563EB':'#fff',color:filter===f?'#fff':'#6b6860'}}>{f}</button>
         ))}
+        {(['all','quote','purchase_order','delivery_note','invoice'] as const).map((type) => (
+          <button key={type} onClick={()=>setDocumentFilter(type)} style={{...btnSm,border:'1px solid rgba(0,0,0,0.14)',background:documentFilter===type?'#1a1916':'#fff',color:documentFilter===type?'#fff':'#6b6860'}}>
+            {type === 'all' ? 'Tous docs' : getCommercialDocumentMeta(type).label}
+          </button>
+        ))}
       </div>
       <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.08)',borderRadius:8,overflow:'hidden'}}>
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',minWidth:800}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:980}}>
             <thead>
-              <tr>{['N° Facture','Client','Total','Payé','Solde','Statut','Date','Actions'].map(h=>(
+              <tr>{['Référence','Type','Client','Total','Payé','Déclaration','Statut','Date','Actions'].map(h=>(
                 <th key={h} style={{fontSize:11,fontWeight:600,color:'#a8a69e',textTransform:'uppercase',padding:'9px 14px',borderBottom:'1px solid rgba(0,0,0,0.08)',textAlign:'left',background:'#f0eeea'}}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>
-              {loading ? <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Chargement...</td></tr>
-              : filtered.length===0 ? <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Aucune facture</td></tr>
+              {loading ? <tr><td colSpan={9} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Chargement...</td></tr>
+              : filtered.length===0 ? <tr><td colSpan={9} style={{textAlign:'center',padding:32,color:'#a8a69e'}}>Aucun document</td></tr>
               : filtered.map(b=>{
-                const sol=b.total_amount-b.paid_amount
                 return (
                   <tr key={b.id} style={{borderBottom:'1px solid rgba(0,0,0,0.05)',cursor:'pointer'}} onClick={()=>openDetail(b)}>
                     <td style={{padding:'11px 14px'}}><span style={{fontFamily:'JetBrains Mono,monospace',fontSize:12,color:'#2563EB',fontWeight:500}}>{b.invoice_number}</span></td>
+                    <td style={{padding:'11px 14px'}}><DocumentTypeBadge type={b.document_type} /></td>
                     <td style={{padding:'11px 14px',fontSize:13,fontWeight:500}}>{b.clients?.full_name}</td>
                     <td style={{padding:'11px 14px',fontFamily:'JetBrains Mono,monospace',fontSize:12}}>{dzd(b.total_amount)}</td>
                     <td style={{padding:'11px 14px',fontFamily:'JetBrains Mono,monospace',fontSize:12,color:'#16a34a'}}>{dzd(b.paid_amount)}</td>
-                    <td style={{padding:'11px 14px',fontFamily:'JetBrains Mono,monospace',fontSize:12,color:sol>0?'#d97706':'#a8a69e'}}>{dzd(sol)}</td>
+                    <td style={{padding:'11px 14px'}}><DeclarationBadge declared={b.client_declared} /></td>
                     <td style={{padding:'11px 14px'}}><StatusBadge s={b.status}/></td>
                     <td style={{padding:'11px 14px',color:'#a8a69e',fontSize:12}}>{new Date(b.created_at).toLocaleDateString('fr-DZ')}</td>
                     <td style={{padding:'11px 14px'}} onClick={e=>e.stopPropagation()}>
                       <div style={{display:'flex',gap:5}}>
-                        {b.status!=='payé' && <button style={{...btnSm,background:'rgba(22,163,74,0.08)',color:'#16a34a',border:'1px solid rgba(22,163,74,0.15)'}} onClick={()=>{setSelectedBill(b);setView('pay')}}>Régler</button>}
+                        <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#1d4ed8',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>router.push(`/${slug}/dashboard/factures/nouvelle?edit=${b.id}`)}>
+                          Modifier
+                        </button>
+                        <button style={{...btnSm,background:b.client_declared ? 'rgba(22,163,74,0.08)' : 'rgba(217,119,6,0.08)',color:b.client_declared ? '#16a34a' : '#d97706',border:'1px solid rgba(0,0,0,0.08)'}} onClick={()=>toggleDeclaration(b, !b.client_declared)}>
+                          {b.client_declared ? 'Déclaré' : 'À déclarer'}
+                        </button>
+                        {b.document_type === 'invoice' && b.status!=='payé' && <button style={{...btnSm,background:'rgba(22,163,74,0.08)',color:'#16a34a',border:'1px solid rgba(22,163,74,0.15)'}} onClick={()=>{setSelectedBill(b);setView('pay')}}>Régler</button>}
+                        {getNextCommercialDocumentTypes(b.document_type).map((targetType) => (
+                          <button key={targetType} style={{...btnSm,background:'rgba(124,58,237,0.08)',color:'#7c3aed',border:'1px solid rgba(124,58,237,0.15)'}} onClick={()=>convertBill(b, targetType)}>
+                            {getCommercialDocumentMeta(targetType).shortLabel}
+                          </button>
+                        ))}
                         <button style={{...btnSm,background:'rgba(37,99,235,0.08)',color:'#2563EB',border:'1px solid rgba(37,99,235,0.15)'}} onClick={()=>generatePDF(b, settings)}>PDF</button>
                         <button style={{...btnSm,background:'rgba(107,104,96,0.08)',color:'#6b6860',border:'1px solid rgba(107,104,96,0.2)'}} onClick={()=>archive(b.id)} title="Archiver">📦</button>
                         <button style={{...btnSm,background:'rgba(220,38,38,0.08)',color:'#dc2626',border:'1px solid rgba(220,38,38,0.15)'}} onClick={()=>deleteBill(b.id, b.invoice_number)} title="Supprimer">🗑</button>
@@ -967,5 +1128,23 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
         </div>
       )}
     </div>
+  )
+}
+
+function DocumentTypeBadge({ type }: { type: string | null | undefined }) {
+  const meta = getCommercialDocumentMeta(type)
+  return (
+    <span style={{ background:meta.light, color:meta.accent, border:`1px solid ${meta.accent}25`, fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap' }}>
+      {meta.label}
+    </span>
+  )
+}
+
+function DeclarationBadge({ declared }: { declared: boolean | null | undefined }) {
+  const meta = getDeclarationMeta(declared)
+  return (
+    <span style={{ background:meta.bg, color:meta.color, border:`1px solid ${meta.color}25`, fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap' }}>
+      {meta.label}
+    </span>
   )
 }

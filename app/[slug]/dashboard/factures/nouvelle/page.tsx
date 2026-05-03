@@ -1,7 +1,20 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import {
+  COMMERCIAL_DOCUMENT_TYPES,
+  getCommercialDocumentMeta,
+  getDefaultCommercialStatus,
+  type CommercialDocumentType,
+} from '@/lib/commercial-documents'
+import {
+  insertBillItemsWithFallback,
+  insertBillWithFallback,
+  normalizeCommercialBill,
+  normalizeCommercialBillItem,
+  updateBillWithFallback,
+} from '@/lib/commercial-bill-compat'
 
 // ============== TYPES ==============
 type InvoiceItem = {
@@ -347,15 +360,19 @@ function ProductSelector({ products, value, onChange, onCreate }: any) {
 export default function NouvelleFacturePage() {
   const router = useRouter()
   const { slug } = useParams() as { slug: string }
+  const searchParams = useSearchParams()
+  const editId = searchParams.get('edit')
   
   const [clients, setClients] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
   const [settings, setSettings] = useState<any>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [loadingDocument, setLoadingDocument] = useState(false)
 
   // ===== INVOICE STATE =====
   const [clientId, setClientId] = useState<string>('')
+  const [documentType, setDocumentType] = useState<CommercialDocumentType>('invoice')
   const [orderNumber, setOrderNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [dueDate, setDueDate] = useState('')
@@ -373,9 +390,11 @@ export default function NouvelleFacturePage() {
   const [terms, setTerms] = useState('')
   const [showNotesPdf, setShowNotesPdf] = useState(true)
   const [showTermsPdf, setShowTermsPdf] = useState(false)
+  const [clientDeclared, setClientDeclared] = useState(false)
+  const [declarationNote, setDeclarationNote] = useState('')
 
   // ===== LOAD DATA =====
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [editId])
 
   async function loadData() {
     const user = JSON.parse(localStorage.getItem('user') || '{}')
@@ -392,9 +411,58 @@ export default function NouvelleFacturePage() {
     
     // Initialiser TVA selon settings
     if (s?.terms_default) setTerms(s.terms_default)
+    if (editId) {
+      await loadExistingDocument(user.company_id)
+    }
+  }
+
+  async function loadExistingDocument(companyId: string) {
+    setLoadingDocument(true)
+    try {
+      const [{ data: bill, error: billError }, { data: items, error: itemsError }] = await Promise.all([
+        supabase.from('bills').select('*').eq('id', editId).eq('company_id', companyId).single(),
+        supabase.from('bill_items').select('*').eq('bill_id', editId).eq('company_id', companyId).order('created_at', { ascending: true }),
+      ])
+      if (billError) throw billError
+      if (itemsError) throw itemsError
+
+      const normalizedBill = normalizeCommercialBill(bill)
+      setClientId(normalizedBill.client_id || '')
+      setDocumentType(normalizedBill.document_type)
+      setOrderNumber(normalizedBill.order_number || '')
+      setInvoiceDate(normalizedBill.created_at ? new Date(normalizedBill.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0])
+      setDueDate(normalizedBill.due_date ? new Date(normalizedBill.due_date).toISOString().split('T')[0] : '')
+      setDiscountEnabled(normalizedBill.discount_enabled === true)
+      setDiscountValue(Number(normalizedBill.discount_value || 0))
+      setTvaEnabled(normalizedBill.tva_enabled !== false)
+      setNotes(normalizedBill.notes || '')
+      setTerms(normalizedBill.terms || '')
+      setShowNotesPdf(normalizedBill.show_notes_pdf !== false)
+      setShowTermsPdf(normalizedBill.show_terms_pdf === true)
+      setClientDeclared(normalizedBill.client_declared === true)
+      setDeclarationNote(normalizedBill.client_declaration_note || '')
+
+      const normalizedItems = (items || []).map((item: any) => {
+        const nextItem = normalizeCommercialBillItem(item)
+        return {
+          id: nextItem.id || newId(),
+          product_id: nextItem.product_id || null,
+          type: nextItem.item_type || 'product',
+          name: nextItem.name_snapshot || '',
+          quantity: Number(nextItem.ordered_quantity ?? nextItem.quantity ?? 1),
+          unit_price: Number(nextItem.unit_price || 0),
+          discount: Number(nextItem.discount || 0),
+        }
+      })
+      if (normalizedItems.length > 0) setItems(normalizedItems)
+    } catch (e: any) {
+      setError(e?.message || 'Impossible de charger ce document.')
+    }
+    setLoadingDocument(false)
   }
 
   const tvaRate = settings.tva_rate !== undefined && settings.tva_rate !== null ? Number(settings.tva_rate) : 19
+  const documentMeta = getCommercialDocumentMeta(documentType)
 
   // ===== ITEM HANDLERS =====
   function updateItem(id: string, patch: Partial<InvoiceItem>) {
@@ -436,7 +504,7 @@ export default function NouvelleFacturePage() {
 
   // ===== SAVE =====
   async function saveBill() {
-    if (saving) return
+    if (saving || loadingDocument) return
     setError('')
     if (!clientId) { setError('Sélectionnez un client'); return }
     const validItems = items.filter(i => i.product_id && i.quantity > 0)
@@ -446,9 +514,16 @@ export default function NouvelleFacturePage() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}')
       
-      const { data: newBill, error: billErr } = await supabase.from('bills').insert({
+      const billPayload = {
         client_id: clientId,
         order_number: orderNumber || null,
+        document_type: documentType,
+        commercial_status: getDefaultCommercialStatus(documentType),
+        client_declared: clientDeclared,
+        client_declared_at: clientDeclared ? new Date().toISOString() : null,
+        client_declaration_note: declarationNote.trim() || null,
+        client_declared_by: user.id,
+        invoice_policy: documentType === 'invoice' ? 'delivered' : 'ordered',
         due_date: dueDate || null,
         notes: notes || null,
         terms: terms || null,
@@ -462,16 +537,32 @@ export default function NouvelleFacturePage() {
         tva_amount: tvaAmount,
         created_by: user.id,
         company_id: user.company_id,
-      }).select().single()
+      }
       
-      if (billErr) throw billErr
-      if (!newBill) throw new Error('Facture non créée')
+      const billResult = editId
+        ? await updateBillWithFallback(supabase, editId, billPayload)
+        : await insertBillWithFallback(supabase, billPayload)
 
-      const { error: itemsErr } = await supabase.from('bill_items').insert(
+      if (billResult.error) throw billResult.error
+      if (billResult.payload.document_type !== documentType) {
+        throw new Error("Le type de document n'est pas encore disponible dans la base. Appliquez la migration commerciale.")
+      }
+      const newBill = billResult.data
+      if (!newBill) throw new Error(editId ? 'Document non mis à jour' : 'Document non créé')
+
+      if (editId) {
+        const { error: deleteItemsError } = await supabase.from('bill_items').delete().eq('bill_id', editId)
+        if (deleteItemsError) throw deleteItemsError
+      }
+
+      const { error: itemsErr } = await insertBillItemsWithFallback(
+        supabase,
         validItems.map(i => ({
           bill_id: newBill.id,
           product_id: i.product_id,
           quantity: i.quantity,
+          ordered_quantity: i.quantity,
+          delivered_quantity: i.quantity,
           unit_price: i.unit_price,
           discount: i.discount || 0,
           total: Math.max(0, (i.quantity * i.unit_price) - (i.discount || 0)),
@@ -486,7 +577,7 @@ export default function NouvelleFacturePage() {
       
       router.push(`/${slug}/dashboard/factures`)
     } catch (e: any) {
-      setError(e.message || 'Erreur lors de la création')
+      setError(e.message || `Erreur lors de la ${editId ? 'mise à jour' : 'création'}`)
     }
     setSaving(false)
   }
@@ -515,8 +606,12 @@ export default function NouvelleFacturePage() {
             Retour
           </button>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: COLORS.text }}>Nouvelle facture</div>
-            <div style={{ fontSize: 11, color: COLORS.textLight }}>Brouillon non enregistré</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: COLORS.text }}>
+              {editId ? `Modifier ${documentMeta.label.toLowerCase()}` : `Nouveau ${documentMeta.label.toLowerCase()}`}
+            </div>
+            <div style={{ fontSize: 11, color: COLORS.textLight }}>
+              {editId ? (loadingDocument ? 'Chargement du document...' : 'Ajustez puis enregistrez les changements') : 'Brouillon non enregistré'}
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -535,7 +630,7 @@ export default function NouvelleFacturePage() {
               border: 'none', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer',
               fontFamily: 'inherit', boxShadow: `0 1px 3px ${COLORS.primary}40`,
             }}>
-            {saving ? 'Création...' : 'Créer la facture'}
+            {saving ? (editId ? 'Mise à jour...' : 'Création...') : (editId ? `Mettre à jour le ${documentMeta.label.toLowerCase()}` : `Créer le ${documentMeta.label.toLowerCase()}`)}
           </button>
         </div>
       </div>
@@ -557,12 +652,41 @@ export default function NouvelleFacturePage() {
             </div>
           )}
 
+          <div style={card}>
+            <div style={cardTitle}>Type de document</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:12 }}>
+              {COMMERCIAL_DOCUMENT_TYPES.map((item) => {
+                const active = item.key === documentType
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setDocumentType(item.key)}
+                    style={{
+                      textAlign:'left',
+                      padding:'14px 12px',
+                      borderRadius:10,
+                      border:`1px solid ${active ? item.accent : COLORS.border}`,
+                      background: active ? item.light : '#fff',
+                      cursor:'pointer',
+                      fontFamily:'inherit',
+                    }}
+                  >
+                    <div style={{ fontSize:11, fontWeight:800, color:item.accent, textTransform:'uppercase' }}>{item.shortLabel}</div>
+                    <div style={{ marginTop:6, fontSize:13, fontWeight:700, color:COLORS.text }}>{item.label}</div>
+                    <div style={{ marginTop:4, fontSize:11, color:COLORS.textMuted, lineHeight:1.5 }}>{item.description}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {/* INVOICE INFO */}
           <div style={card}>
-            <div style={cardTitle}>📋 Informations facture</div>
+            <div style={cardTitle}>📋 Informations document</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
               <div>
-                <label style={lbl}>N° Commande</label>
+                <label style={lbl}>Reference commande / dossier</label>
                 <input style={inp} placeholder="Ex: CMD-2026-001"
                   value={orderNumber} onChange={e => setOrderNumber(e.target.value)} />
               </div>
@@ -572,7 +696,7 @@ export default function NouvelleFacturePage() {
                   value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
               </div>
               <div>
-                <label style={lbl}>Date d'échéance</label>
+                <label style={lbl}>{documentType === 'invoice' ? "Date d'échéance" : 'Date de suivi'}</label>
                 <input type="date" style={inp}
                   value={dueDate} onChange={e => setDueDate(e.target.value)} />
               </div>
@@ -585,6 +709,26 @@ export default function NouvelleFacturePage() {
             <ClientSelector
               clients={clients} value={clientId}
               onChange={setClientId} onCreate={createClient}
+            />
+          </div>
+
+          <div style={card}>
+            <div style={cardTitle}>Déclaration client</div>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start', marginBottom:12 }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>Document déjà déclaré</div>
+                <div style={{ fontSize:11, color:COLORS.textMuted, marginTop:4, lineHeight:1.6 }}>
+                  Le cabinet pourra filtrer les pièces déclarées et non déclarées pour préparer le traitement comptable.
+                </div>
+              </div>
+              <Toggle checked={clientDeclared} onChange={setClientDeclared} />
+            </div>
+            <textarea
+              style={{ ...inp, minHeight:70, resize:'vertical' }}
+              rows={3}
+              placeholder="Note utile pour la déclaration: période, TVA, précision comptable..."
+              value={declarationNote}
+              onChange={e => setDeclarationNote(e.target.value)}
             />
           </div>
 
@@ -603,7 +747,7 @@ export default function NouvelleFacturePage() {
               gap: 10, marginBottom: 8, paddingBottom: 8,
               borderBottom: `1px solid ${COLORS.borderLight}`,
             }}>
-              {['Désignation', 'Qté', 'Prix HT', 'Remise', 'Total', ''].map((h, i) => (
+              {['Désignation', documentType === 'delivery_note' ? 'Qté livrée' : 'Qté', 'Prix HT', 'Remise', 'Total', ''].map((h, i) => (
                 <div key={i} style={{
                   fontSize: 10, fontWeight: 700, color: COLORS.textLight,
                   textTransform: 'uppercase', letterSpacing: '.5px',
@@ -682,7 +826,7 @@ export default function NouvelleFacturePage() {
                 </div>
               </div>
               <textarea style={{ ...inp, minHeight: 70, resize: 'vertical' }} rows={3}
-                placeholder="Note additionnelle pour le client..."
+                placeholder={documentType === 'quote' ? 'Validité du devis, périmètre de la prestation...' : 'Note additionnelle pour le client...'}
                 value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
 
@@ -792,7 +936,7 @@ export default function NouvelleFacturePage() {
                 cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
                 boxShadow: `0 4px 14px ${COLORS.primary}40`,
               }}>
-              {saving ? 'Création en cours...' : '✓ Créer la facture'}
+              {saving ? (editId ? 'Mise à jour en cours...' : 'Création en cours...') : (editId ? `✓ Mettre à jour le ${documentMeta.label.toLowerCase()}` : `✓ Créer le ${documentMeta.label.toLowerCase()}`)}
             </button>
 
             <div style={{ textAlign: 'center', fontSize: 10, color: COLORS.textLight, marginTop: 16 }}>

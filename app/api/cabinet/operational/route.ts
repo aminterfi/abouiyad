@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/admin-supabase'
+import { normalizeCommercialBill, normalizeCommercialBillItem } from '@/lib/commercial-bill-compat'
 
 export const runtime = 'nodejs'
 
@@ -148,6 +149,67 @@ export async function GET(request: Request) {
         : { data: [] as any[] }
 
       return NextResponse.json({ rows: data || [], companies })
+    }
+
+    if (kind === 'commercial') {
+      const companyId = searchParams.get('companyId')
+      if (!companyId) {
+        return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
+      }
+
+      const targetCompany = companies.find((company) => company.id === companyId)
+      if (!targetCompany) {
+        return NextResponse.json({ error: 'Company not managed by cabinet' }, { status: 404 })
+      }
+
+      const [{ data: bills }, { data: items }] = await Promise.all([
+        admin
+          .from('bills')
+          .select('*, clients(full_name)')
+          .eq('company_id', companyId)
+          .eq('is_archived', false)
+          .order('created_at', { ascending: false }),
+        admin
+          .from('bill_items')
+          .select('*')
+          .eq('company_id', companyId),
+      ])
+
+      const itemMap = aggregateByCompany((items || []).map((item: any) => ({ ...normalizeCommercialBillItem(item), company_id: item.bill_id })))
+      const normalizedBills = (bills || []).map((bill: any) => {
+        const normalizedBill = normalizeCommercialBill(bill)
+        const billItems = itemMap[bill.id] || []
+        const orderedQuantity = billItems.reduce((sum: number, item: any) => sum + Number(item.ordered_quantity ?? item.quantity ?? 0), 0)
+        const deliveredQuantity = billItems.reduce((sum: number, item: any) => sum + Number(item.delivered_quantity ?? item.quantity ?? 0), 0)
+        return {
+          ...normalizedBill,
+          ordered_quantity: orderedQuantity,
+          delivered_quantity: deliveredQuantity,
+          balance: Number(normalizedBill.total_amount || 0) - Number(normalizedBill.paid_amount || 0),
+        }
+      })
+
+      const byType = normalizedBills.reduce((acc: Record<string, number>, bill: any) => {
+        const key = bill.document_type || 'invoice'
+        acc[key] = (acc[key] || 0) + 1
+        return acc
+      }, {})
+
+      const declaredCount = normalizedBills.filter((bill: any) => bill.client_declared === true).length
+      const pendingDeclarationCount = normalizedBills.length - declaredCount
+
+      return NextResponse.json({
+        company: targetCompany,
+        summary: {
+          total: normalizedBills.length,
+          declared: declaredCount,
+          pendingDeclaration: pendingDeclarationCount,
+          totalAmount: normalizedBills.reduce((sum: number, bill: any) => sum + Number(bill.total_amount || 0), 0),
+          paidAmount: normalizedBills.reduce((sum: number, bill: any) => sum + Number(bill.paid_amount || 0), 0),
+          byType,
+        },
+        rows: normalizedBills.slice(0, 12),
+      })
     }
 
     return NextResponse.json({ error: 'Unsupported kind' }, { status: 400 })

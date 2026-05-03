@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
+import { getCommercialDocumentMeta, getDeclarationMeta } from '@/lib/commercial-documents'
 
 function dzd(v:number){return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:0})+' DZD'}
 
@@ -21,6 +22,7 @@ export default function CompanyDetailPage() {
   const [activatePlan, setActivatePlan] = useState({plan:'pro', price:'2000', months:12})
   const [workspaceForm, setWorkspaceForm] = useState({ workspace_type: 'cabinet', parent_cabinet_id: '' })
   const [modules, setModules] = useState<string[]>([])
+  const [commercial, setCommercial] = useState<any>(null)
 
   useEffect(()=>{
     const u = JSON.parse(localStorage.getItem('user') || '{}')
@@ -55,7 +57,22 @@ export default function CompanyDetailPage() {
       .select('module_key,is_enabled')
       .eq('company_id', companyId)
     setModules((accessRows || []).filter((row: any) => row.is_enabled !== false).map((row: any) => row.module_key))
+    await loadCommercial()
     setLoading(false)
+  }
+
+  async function loadCommercial() {
+    try {
+      const response = await fetch(`/api/cabinet/operational?kind=commercial&slug=${slug}&companyId=${companyId}`, {
+        cache: 'no-store',
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result?.error || 'Commercial data unavailable')
+      setCommercial(result)
+    } catch (error: any) {
+      setCommercial(null)
+      setErr((prev) => prev || error?.message || 'Commercial data unavailable')
+    }
   }
 
   function flash(m:string, isErr=false){
@@ -230,6 +247,83 @@ export default function CompanyDetailPage() {
               <div style={{fontSize:10,color:'#a8a69e',marginTop:3}}>{s.l}</div>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>Workflow commercial</div>
+        <div style={{fontSize:12,color:'#6b6860',marginBottom:16,lineHeight:1.6}}>
+          Le client classe ses pièces entre déclaré et non déclaré. Le cabinet suit ensuite le flux recommandé:
+          <strong style={{color:'#1a1916'}}> Devis → Bon de commande → Bon de livraison → Facture</strong>.
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:18}}>
+          {[
+            { label:'Documents', value:commercial?.summary?.total || 0, color:'#1a1916' },
+            { label:'Déclarés', value:commercial?.summary?.declared || 0, color:'#15803d' },
+            { label:'À vérifier', value:commercial?.summary?.pendingDeclaration || 0, color:'#d97706' },
+            { label:'Montant total', value:dzd(commercial?.summary?.totalAmount || 0), color:'#2563EB', mono:true },
+          ].map((item:any) => (
+            <div key={item.label} style={{padding:'14px 16px',border:'1px solid rgba(0,0,0,0.08)',borderRadius:10,background:'#fafaf8'}}>
+              <div style={{fontSize:11,color:'#a8a69e',textTransform:'uppercase',marginBottom:6}}>{item.label}</div>
+              <div style={{fontSize:18,fontWeight:700,color:item.color,fontFamily:item.mono?'JetBrains Mono,monospace':'inherit'}}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:10,marginBottom:18}}>
+          {(['quote','purchase_order','delivery_note','invoice'] as const).map((type) => {
+            const meta = getCommercialDocumentMeta(type)
+            return (
+              <div key={type} style={{padding:'12px 14px',borderRadius:10,border:`1px solid ${meta.accent}22`,background:meta.light}}>
+                <div style={{fontSize:10,fontWeight:800,color:meta.accent,textTransform:'uppercase'}}>{meta.shortLabel}</div>
+                <div style={{fontSize:13,fontWeight:700,color:'#1a1916',marginTop:6}}>{meta.label}</div>
+                <div style={{fontSize:18,fontWeight:800,color:meta.accent,marginTop:8}}>
+                  {commercial?.summary?.byType?.[type] || 0}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:'#1a1916',marginBottom:10}}>Derniers documents à traiter</div>
+        <div style={{display:'grid',gap:10}}>
+          {(commercial?.rows || []).length === 0 ? (
+            <div style={{padding:'16px 18px',border:'1px dashed rgba(0,0,0,0.16)',borderRadius:10,fontSize:13,color:'#6b6860'}}>
+              Aucun document commercial pour cette entreprise pour le moment.
+            </div>
+          ) : (
+            (commercial?.rows || []).map((row: any) => {
+              const meta = getCommercialDocumentMeta(row.document_type)
+              const declaration = getDeclarationMeta(row.client_declared)
+              return (
+                <div key={row.id} style={{display:'grid',gridTemplateColumns:'1.2fr .8fr .8fr .9fr',gap:12,alignItems:'center',padding:'14px 16px',border:'1px solid rgba(0,0,0,0.08)',borderRadius:10,background:'#fff'}}>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:700,color:'#1a1916'}}>{row.invoice_number}</div>
+                    <div style={{fontSize:11,color:'#6b6860',marginTop:4}}>
+                      {row.clients?.full_name || 'Client'} · {new Date(row.created_at).toLocaleDateString('fr-DZ')}
+                    </div>
+                    {row.client_declaration_note ? (
+                      <div style={{fontSize:11,color:'#6b6860',marginTop:6,lineHeight:1.5}}>{row.client_declaration_note}</div>
+                    ) : null}
+                  </div>
+                  <div>
+                    <div style={{display:'inline-flex',padding:'4px 8px',borderRadius:999,border:`1px solid ${meta.accent}22`,background:meta.light,color:meta.accent,fontSize:11,fontWeight:700}}>
+                      {meta.label}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{display:'inline-flex',padding:'4px 8px',borderRadius:999,border:`1px solid ${declaration.color}22`,background:declaration.bg,color:declaration.color,fontSize:11,fontWeight:700}}>
+                      {declaration.label}
+                    </div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:13,fontWeight:700,color:'#1a1916',fontFamily:'JetBrains Mono,monospace'}}>{dzd(row.total_amount || 0)}</div>
+                    <div style={{fontSize:11,color:'#6b6860',marginTop:4}}>
+                      Solde {dzd((row.balance ?? 0))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
         </div>
       </div>
 
