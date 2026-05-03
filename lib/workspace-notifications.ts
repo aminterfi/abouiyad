@@ -14,6 +14,8 @@ export type WorkspaceNotification = {
   tone: 'accent' | 'warning' | 'success'
 }
 
+export type NotificationEventKind = 'create' | 'status_update' | 'other'
+
 export type WorkspaceNotificationContext = {
   companyIds: string[]
   isCabinet: boolean
@@ -141,6 +143,49 @@ export function buildWorkspaceNotifications(
   return items
     .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
     .slice(0, 12)
+}
+
+export function classifyRealtimeNotificationEvent(
+  table: 'service_requests' | 'support_tickets',
+  payload: any,
+  context: WorkspaceNotificationContext,
+) {
+  const eventType = payload?.eventType || payload?.event || ''
+  const nextRow = payload?.new || {}
+  const prevRow = payload?.old || {}
+
+  if (context.isCabinet) {
+    if (eventType === 'INSERT') {
+      return {
+        shouldNotify: true,
+        eventKind: 'create' as NotificationEventKind,
+      }
+    }
+
+    return {
+      shouldNotify: false,
+      eventKind: 'other' as NotificationEventKind,
+    }
+  }
+
+  if (eventType === 'UPDATE' && nextRow?.status && nextRow.status !== prevRow?.status) {
+    return {
+      shouldNotify: true,
+      eventKind: 'status_update' as NotificationEventKind,
+    }
+  }
+
+  if (table === 'service_requests' && eventType === 'INSERT' && nextRow?.created_by !== prevRow?.created_by) {
+    return {
+      shouldNotify: false,
+      eventKind: 'other' as NotificationEventKind,
+    }
+  }
+
+  return {
+    shouldNotify: false,
+    eventKind: 'other' as NotificationEventKind,
+  }
 }
 
 export async function loadWorkspaceNotifications(user: any, pathname: string) {

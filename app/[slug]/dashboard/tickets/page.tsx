@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
+import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -155,8 +156,12 @@ export default function TicketsPage() {
     }
 
     setup()
+    const timer = window.setInterval(() => {
+      if (active) load()
+    }, 8000)
     return () => {
       active = false
+      window.clearInterval(timer)
       if (channel) supabase.removeChannel(channel)
     }
   }, [pathname])
@@ -175,6 +180,17 @@ export default function TicketsPage() {
       created_by: currentUser.id,
     })
     if (err) setError('Impossible de creer le ticket.')
+    else if (mode === 'client') {
+      sendWorkspaceEmailNotification({
+        scope: 'cabinet',
+        kind: 'ticket',
+        action: 'created',
+        companyId: currentUser.company_id,
+        title: title.trim(),
+        status: 'open',
+        actorName: currentUser.full_name || currentUser.email || null,
+      })
+    }
     setTitle('')
     setDescription('')
     setPriority('normal')
@@ -185,11 +201,23 @@ export default function TicketsPage() {
   async function updateStatus(ticket: any, nextStatus: string) {
     if (!canManage) return
     setSaving(true)
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
     const { error: err } = await supabase
       .from('support_tickets')
       .update({ status: nextStatus, updated_at: new Date().toISOString() })
       .eq('id', ticket.id)
     if (err) setError('Impossible de mettre a jour le ticket.')
+    else {
+      sendWorkspaceEmailNotification({
+        scope: 'client',
+        kind: 'ticket',
+        action: 'status_updated',
+        companyId: ticket.company_id,
+        title: ticket.title,
+        status: nextStatus,
+        actorName: currentUser.full_name || currentUser.email || null,
+      })
+    }
     setSaving(false)
     load()
   }

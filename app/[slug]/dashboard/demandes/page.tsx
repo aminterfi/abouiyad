@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
+import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -179,8 +180,12 @@ export default function DemandesPage() {
     }
 
     setup()
+    const timer = window.setInterval(() => {
+      if (active) load()
+    }, 8000)
     return () => {
       active = false
+      window.clearInterval(timer)
       if (channel) supabase.removeChannel(channel)
     }
   }, [pathname])
@@ -201,6 +206,16 @@ export default function DemandesPage() {
     })
     if (err) {
       setError('Impossible de creer la demande.')
+    } else if (mode === 'client') {
+      sendWorkspaceEmailNotification({
+        scope: 'cabinet',
+        kind: 'demande',
+        action: 'created',
+        companyId: currentUser.company_id,
+        title: title.trim(),
+        status: 'pending',
+        actorName: currentUser.full_name || currentUser.email || null,
+      })
     }
     setTitle('')
     setDetails('')
@@ -231,6 +246,17 @@ export default function DemandesPage() {
 
     const { error: err } = await supabase.from('service_requests').update(payload).eq('id', row.id)
     if (err) setError('Impossible de mettre a jour le statut.')
+    else {
+      sendWorkspaceEmailNotification({
+        scope: 'client',
+        kind: 'demande',
+        action: 'status_updated',
+        companyId: row.company_id,
+        title: row.title,
+        status: nextStatus,
+        actorName: currentUser.full_name || currentUser.email || null,
+      })
+    }
     setSaving(false)
     load()
   }

@@ -37,9 +37,11 @@ import {
   type ShellKey,
 } from '@/lib/workspace'
 import {
+  classifyRealtimeNotificationEvent,
   isNotificationEventRelevant,
   loadWorkspaceNotificationContext,
   loadWorkspaceNotifications,
+  type NotificationEventKind,
   type WorkspaceNotification,
   type WorkspaceNotificationContext,
 } from '@/lib/workspace-notifications'
@@ -134,6 +136,7 @@ export default function WorkspaceShell({
   const notifContextRef = useRef<WorkspaceNotificationContext | null>(null)
   const notificationBootedRef = useRef(false)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const previousTopNotificationRef = useRef<string>('')
   const resolvedShell: ShellKey = shell === 'admin-rs' ? 'cabinet' : shell
 
   useEffect(() => {
@@ -197,7 +200,7 @@ export default function WorkspaceShell({
       audioContextRef.current = new AudioCtor()
     }
 
-    function playNotificationSound() {
+    function playNotificationSound(kind: NotificationEventKind, isCabinetSide: boolean) {
       try {
         ensureAudioReady()
         const audio = audioContextRef.current
@@ -205,17 +208,24 @@ export default function WorkspaceShell({
         if (audio.state === 'suspended') {
           audio.resume().catch(() => {})
         }
-        const oscillator = audio.createOscillator()
-        const gain = audio.createGain()
-        oscillator.type = 'sine'
-        oscillator.frequency.setValueAtTime(880, audio.currentTime)
-        gain.gain.setValueAtTime(0.0001, audio.currentTime)
-        gain.gain.exponentialRampToValueAtTime(0.12, audio.currentTime + 0.01)
-        gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.18)
-        oscillator.connect(gain)
-        gain.connect(audio.destination)
-        oscillator.start(audio.currentTime)
-        oscillator.stop(audio.currentTime + 0.2)
+        const tones = isCabinetSide
+          ? (kind === 'create' ? [740, 988] : [820])
+          : (kind === 'status_update' ? [620, 784, 988] : [660])
+
+        tones.forEach((frequency, index) => {
+          const oscillator = audio.createOscillator()
+          const gain = audio.createGain()
+          const startAt = audio.currentTime + index * 0.08
+          oscillator.type = isCabinetSide ? 'triangle' : 'sine'
+          oscillator.frequency.setValueAtTime(frequency, startAt)
+          gain.gain.setValueAtTime(0.0001, startAt)
+          gain.gain.exponentialRampToValueAtTime(isCabinetSide ? 0.09 : 0.11, startAt + 0.01)
+          gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.14)
+          oscillator.connect(gain)
+          gain.connect(audio.destination)
+          oscillator.start(startAt)
+          oscillator.stop(startAt + 0.16)
+        })
       } catch {}
     }
 
@@ -231,6 +241,28 @@ export default function WorkspaceShell({
       } catch {}
     }
 
+    function maybePlayFallbackSound(items: WorkspaceNotification[]) {
+      if (!notificationBootedRef.current || !items[0]) return
+      const top = items[0]
+      if (!top.occurredAt) return
+      if (previousTopNotificationRef.current === top.id) return
+      previousTopNotificationRef.current = top.id
+
+      const isCabinetSide = Boolean(notifContextRef.current?.isCabinet)
+      if (isCabinetSide) {
+        if (['pending', 'open'].includes(top.status)) {
+          playNotificationSound('create', true)
+          maybeShowBrowserNotification(top)
+        }
+        return
+      }
+
+      if (!['pending', 'open'].includes(top.status)) {
+        playNotificationSound('status_update', false)
+        maybeShowBrowserNotification(top)
+      }
+    }
+
     async function run() {
       setNotifLoading(true)
       try {
@@ -241,6 +273,7 @@ export default function WorkspaceShell({
         if (!active) return
         notifContextRef.current = context
         setNotifications(items)
+        maybePlayFallbackSound(items)
       } catch {
         if (!active) return
         setNotifications([])
@@ -249,16 +282,17 @@ export default function WorkspaceShell({
       }
     }
 
-    async function handleRealtimeEvent(payload: any) {
+    async function handleRealtimeEvent(table: 'service_requests' | 'support_tickets', payload: any) {
       const companyId = payload?.new?.company_id || payload?.old?.company_id || null
       if (!isNotificationEventRelevant(companyId, notifContextRef.current)) return
+      const classification = classifyRealtimeNotificationEvent(table, payload, notifContextRef.current as WorkspaceNotificationContext)
 
       const items = await loadWorkspaceNotifications(user, pathname)
       if (!active) return
       setNotifications(items)
 
-      if (notificationBootedRef.current && items[0]) {
-        playNotificationSound()
+      if (notificationBootedRef.current && classification.shouldNotify && items[0]) {
+        playNotificationSound(classification.eventKind, Boolean(notifContextRef.current?.isCabinet))
         maybeShowBrowserNotification(items[0])
       }
       notificationBootedRef.current = true
@@ -276,17 +310,21 @@ export default function WorkspaceShell({
     run().then(() => {
       if (!active) return
       notificationBootedRef.current = true
+      previousTopNotificationRef.current = ''
       channel = supabase
         .channel(`workspace-notifs-${user.id}-${slug}-${resolvedShell}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, handleRealtimeEvent)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, handleRealtimeEvent)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, (payload) => handleRealtimeEvent('service_requests', payload))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, (payload) => handleRealtimeEvent('support_tickets', payload))
         .subscribe()
 
       window.addEventListener('pointerdown', handleFirstPointerDown, { once: true })
     })
 
+    const timer = window.setInterval(run, 8000)
+
     return () => {
       active = false
+      window.clearInterval(timer)
       if (channel) {
         supabase.removeChannel(channel)
       }
