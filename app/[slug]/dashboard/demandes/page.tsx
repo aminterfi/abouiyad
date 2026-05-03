@@ -7,6 +7,7 @@ import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
 import { fetchCabinetDemandes, getSlugFromPathname, updateCabinetOperationalItem } from '@/lib/cabinet-api'
+import { createWorkspaceNotification } from '@/lib/workspace-notifications'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -199,7 +200,7 @@ export default function DemandesPage() {
   }
 
   useEffect(() => { load() }, [pathname])
-  useRealtime(['service_requests'], load, { intervalMs: 4000, deps: [pathname] })
+  useRealtime(['service_requests'], load, { intervalMs: 2000, deps: [pathname] })
 
   async function createRequest() {
     setError('')
@@ -218,6 +219,14 @@ export default function DemandesPage() {
     if (err) {
       setError('Impossible de creer la demande.')
     } else if (mode === 'client') {
+      await createWorkspaceNotification({
+        audience: 'cabinet',
+        kind: 'demande',
+        companyId: currentUser.company_id,
+        title: title.trim(),
+        message: 'Nouvelle demande client a traiter.',
+        status: 'pending',
+      })
       sendWorkspaceEmailNotification({
         scope: 'cabinet',
         kind: 'demande',
@@ -276,6 +285,15 @@ export default function DemandesPage() {
         title: row.title,
         status: nextStatus,
         actorName: currentUser.full_name || currentUser.email || null,
+      })
+      await createWorkspaceNotification({
+        audience: 'client',
+        kind: 'demande',
+        companyId: row.company_id,
+        entityId: row.id,
+        title: row.title,
+        message: 'Le cabinet a mis a jour votre demande.',
+        status: nextStatus,
       })
     } catch {
       setError('Impossible de mettre a jour le statut.')
@@ -340,6 +358,15 @@ export default function DemandesPage() {
         title: row.title,
         status: row.status,
         actorName: currentUser.full_name || currentUser.email || null,
+      })
+      await createWorkspaceNotification({
+        audience: 'client',
+        kind: 'demande',
+        companyId: row.company_id,
+        entityId: row.id,
+        title: row.title,
+        message: 'Le cabinet a ajoute une reponse ou un document a votre demande.',
+        status: row.status,
       })
       setError('')
       await load()

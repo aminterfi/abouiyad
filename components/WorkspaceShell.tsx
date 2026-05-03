@@ -324,7 +324,7 @@ export default function WorkspaceShell({
       window.addEventListener('pointerdown', handleFirstPointerDown, { once: true })
     })
 
-    const timer = window.setInterval(run, 4000)
+    const timer = window.setInterval(run, 2000)
 
     return () => {
       active = false

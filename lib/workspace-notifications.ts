@@ -198,6 +198,21 @@ export async function loadWorkspaceNotifications(user: any, pathname: string) {
   const context = await loadWorkspaceNotificationContext(user, pathname)
   if (!context) return []
 
+  try {
+    const query = new URLSearchParams({
+      slug: context.slug,
+      shell: context.isCabinet ? 'cabinet' : 'client',
+      companyId: String(user?.company_id || ''),
+    })
+    const response = await fetch(`/api/workspace/notifications?${query.toString()}`, { cache: 'no-store' })
+    if (response.ok) {
+      const data = await response.json()
+      if (Array.isArray(data?.notifications)) {
+        return data.notifications
+      }
+    }
+  } catch {}
+
   const [{ data: demandes, error: demandesError }, { data: tickets, error: ticketsError }] = await Promise.all([
     supabase
       .from('service_requests')
@@ -225,4 +240,26 @@ export async function loadWorkspaceNotifications(user: any, pathname: string) {
     demandesError ? [] : (demandes || []),
     ticketsError ? [] : (tickets || []),
   )
+}
+
+type CreateWorkspaceNotificationPayload = {
+  audience: 'cabinet' | 'client'
+  kind: 'demande' | 'ticket'
+  companyId: string
+  entityId?: string | null
+  title: string
+  message: string
+  status?: string | null
+}
+
+export async function createWorkspaceNotification(payload: CreateWorkspaceNotificationPayload) {
+  try {
+    await fetch('/api/workspace/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // Notifications should never block the main business action.
+  }
 }

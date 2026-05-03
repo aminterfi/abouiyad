@@ -7,6 +7,7 @@ import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
 import { fetchCabinetTickets, getSlugFromPathname, updateCabinetOperationalItem } from '@/lib/cabinet-api'
+import { createWorkspaceNotification } from '@/lib/workspace-notifications'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -175,7 +176,7 @@ export default function TicketsPage() {
   }
 
   useEffect(() => { load() }, [pathname])
-  useRealtime(['support_tickets'], load, { intervalMs: 4000, deps: [pathname] })
+  useRealtime(['support_tickets'], load, { intervalMs: 2000, deps: [pathname] })
 
   async function createTicket() {
     setError('')
@@ -192,6 +193,14 @@ export default function TicketsPage() {
     })
     if (err) setError('Impossible de creer le ticket.')
     else if (mode === 'client') {
+      await createWorkspaceNotification({
+        audience: 'cabinet',
+        kind: 'ticket',
+        companyId: currentUser.company_id,
+        title: title.trim(),
+        message: 'Nouveau ticket client a prendre en charge.',
+        status: 'open',
+      })
       sendWorkspaceEmailNotification({
         scope: 'cabinet',
         kind: 'ticket',
@@ -238,6 +247,15 @@ export default function TicketsPage() {
         title: ticket.title,
         status: nextStatus,
         actorName: currentUser.full_name || currentUser.email || null,
+      })
+      await createWorkspaceNotification({
+        audience: 'client',
+        kind: 'ticket',
+        companyId: ticket.company_id,
+        entityId: ticket.id,
+        title: ticket.title,
+        message: 'Le cabinet a mis a jour votre ticket.',
+        status: nextStatus,
       })
     } catch {
       setError('Impossible de mettre a jour le ticket.')
@@ -297,6 +315,15 @@ export default function TicketsPage() {
         title: ticket.title,
         status: ticket.status,
         actorName: currentUser.full_name || currentUser.email || null,
+      })
+      await createWorkspaceNotification({
+        audience: 'client',
+        kind: 'ticket',
+        companyId: ticket.company_id,
+        entityId: ticket.id,
+        title: ticket.title,
+        message: 'Le cabinet a ajoute une reponse ou un document a votre ticket.',
+        status: ticket.status,
       })
       setError('')
       await load()
