@@ -60,6 +60,13 @@ const itemHead: React.CSSProperties = { display:'flex', justifyContent:'space-be
 const itemMain: React.CSSProperties = { minWidth:0, flex:1 }
 const badges: React.CSSProperties = { display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }
 const dateCol: React.CSSProperties = { fontSize:12, color:'var(--ws-muted)', textAlign:'right', display:'grid', gap:4 }
+const detailLayout: React.CSSProperties = { display:'grid', gridTemplateColumns:'minmax(0, 1.15fr) minmax(320px, 0.85fr)', gap:16, alignItems:'start' }
+const detailPanel: React.CSSProperties = { ...softCard, position:'sticky', top:16 }
+const detailBlock: React.CSSProperties = { border:'1px solid var(--ws-border)', borderRadius:12, padding:14, background:'var(--ws-panel)' }
+const metaGrid: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:10 }
+const metaCell: React.CSSProperties = { padding:12, borderRadius:10, background:'var(--ws-panel-2)', border:'1px solid var(--ws-border)' }
+const responseBox: React.CSSProperties = { ...textarea, minHeight:120 }
+const linkButton: React.CSSProperties = { ...button, background:'var(--ws-panel-2)', color:'var(--ws-text)', border:'1px solid var(--ws-border)' }
 
 function filterButton(active: boolean): React.CSSProperties {
   return {
@@ -109,8 +116,13 @@ export default function TicketsPage() {
   const [priority, setPriority] = useState('normal')
   const [filter, setFilter] = useState('all')
   const [saving, setSaving] = useState(false)
+  const [savingDetail, setSavingDetail] = useState(false)
   const [error, setError] = useState('')
   const [user, setUser] = useState<any>(null)
+  const [selectedId, setSelectedId] = useState('')
+  const [replyDraft, setReplyDraft] = useState('')
+  const [docNameDraft, setDocNameDraft] = useState('')
+  const [docUrlDraft, setDocUrlDraft] = useState('')
 
   const [mode, setMode] = useState<'client' | 'cabinet'>('client')
   const canManage = mode === 'cabinet'
@@ -240,6 +252,59 @@ export default function TicketsPage() {
   const progressCount = tickets.filter((ticket) => ticket.status === 'in_progress').length
   const waitingCount = tickets.filter((ticket) => ticket.status === 'waiting_client').length
   const resolvedCount = tickets.filter((ticket) => ['resolved', 'closed'].includes(ticket.status)).length
+  const selectedTicket = filtered.find((ticket) => ticket.id === selectedId) || filtered[0] || null
+
+  useEffect(() => {
+    if (!filtered.length) {
+      setSelectedId('')
+      return
+    }
+    if (!selectedId || !filtered.some((ticket) => ticket.id === selectedId)) {
+      setSelectedId(filtered[0].id)
+    }
+  }, [filtered, selectedId])
+
+  useEffect(() => {
+    setReplyDraft(selectedTicket?.cabinet_reply || '')
+    setDocNameDraft(selectedTicket?.attached_document_name || '')
+    setDocUrlDraft(selectedTicket?.attached_document_url || '')
+  }, [selectedTicket?.id])
+
+  async function saveClientAnswer(ticket: any) {
+    if (!canManage || !ticket) return
+    setSavingDetail(true)
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+    const payload = {
+      cabinet_reply: replyDraft.trim() || null,
+      attached_document_name: docNameDraft.trim() || null,
+      attached_document_url: docUrlDraft.trim() || null,
+      response_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    try {
+      const slug = getSlugFromPathname(pathname)
+      try {
+        await updateCabinetOperationalItem(slug, 'ticket', ticket.id, payload)
+      } catch {
+        const { error: err } = await supabase.from('support_tickets').update(payload).eq('id', ticket.id)
+        if (err) throw err
+      }
+      sendWorkspaceEmailNotification({
+        scope: 'client',
+        kind: 'ticket',
+        action: 'status_updated',
+        companyId: ticket.company_id,
+        title: ticket.title,
+        status: ticket.status,
+        actorName: currentUser.full_name || currentUser.email || null,
+      })
+      setError('')
+      await load()
+    } catch {
+      setError('Impossible d enregistrer la reponse ou le document. Appliquez la migration detail si necessaire.')
+    }
+    setSavingDetail(false)
+  }
 
   return (
     <div style={page}>
@@ -323,9 +388,12 @@ export default function TicketsPage() {
         {filtered.length === 0 ? (
           <div style={copy}>Aucun ticket pour ce filtre.</div>
         ) : (
-          <div style={list}>
-            {filtered.map((ticket: any) => (
-              <article key={ticket.id} style={item}>
+          <div style={detailLayout}>
+            <div style={list}>
+            {filtered.map((ticket: any) => {
+              const active = selectedTicket?.id === ticket.id
+              return (
+              <article key={ticket.id} style={{ ...item, cursor:'pointer', borderColor: active ? 'var(--ws-accent)' : 'var(--ws-border)', boxShadow: active ? '0 0 0 1px var(--ws-accent)' : 'none' }} onClick={() => setSelectedId(ticket.id)}>
                 <div style={itemHead}>
                   <div style={itemMain}>
                     <div style={badges}>
@@ -366,7 +434,114 @@ export default function TicketsPage() {
                   </div>
                 )}
               </article>
-            ))}
+            )})}
+            </div>
+
+            <aside style={detailPanel}>
+              {!selectedTicket ? (
+                <div style={copy}>Selectionnez un ticket pour ouvrir son detail.</div>
+              ) : (
+                <>
+                  <div style={head}>
+                    <div>
+                      <div style={{ ...titleText, fontSize:18 }}>{selectedTicket.title}</div>
+                      <div style={{ ...copy, marginTop:6 }}>Priorite {selectedTicket.priority}</div>
+                    </div>
+                    {badge(selectedTicket.status)}
+                  </div>
+
+                  <div style={metaGrid}>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Entreprise</div>
+                      <div style={{ marginTop:6, fontWeight:700 }}>{mode === 'cabinet' ? (companyLookup[selectedTicket.company_id]?.name || 'Client') : (user?.company_name || 'Votre entreprise')}</div>
+                    </div>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Mise a jour</div>
+                      <div style={{ marginTop:6, fontWeight:700 }}>{formatDate(selectedTicket.updated_at)}</div>
+                    </div>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Creation</div>
+                      <div style={{ marginTop:6, fontWeight:700 }}>{formatDate(selectedTicket.created_at)}</div>
+                    </div>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Statut client</div>
+                      <div style={{ marginTop:6 }}>{badge(selectedTicket.status)}</div>
+                    </div>
+                  </div>
+
+                  <div style={detailBlock}>
+                    <div style={titleText}>Message du client</div>
+                    <div style={{ ...copy, marginTop:8, lineHeight:1.7 }}>{selectedTicket.description || 'Aucun detail fourni.'}</div>
+                  </div>
+
+                  <div style={detailBlock}>
+                    <div style={titleText}>Reponse du cabinet</div>
+                    {canManage ? (
+                      <div style={{ display:'grid', gap:10, marginTop:10 }}>
+                        <textarea
+                          style={responseBox}
+                          value={replyDraft}
+                          onChange={(e) => setReplyDraft(e.target.value)}
+                          placeholder="Expliquez la resolution ou les etapes suivantes..."
+                        />
+                        <input
+                          style={field}
+                          value={docNameDraft}
+                          onChange={(e) => setDocNameDraft(e.target.value)}
+                          placeholder="Nom du document partage"
+                        />
+                        <input
+                          style={field}
+                          value={docUrlDraft}
+                          onChange={(e) => setDocUrlDraft(e.target.value)}
+                          placeholder="Lien du document (https://...)"
+                        />
+                        <div style={actionRow}>
+                          <button style={button} onClick={() => saveClientAnswer(selectedTicket)} disabled={savingDetail}>
+                            {savingDetail ? '...' : 'Envoyer la reponse'}
+                          </button>
+                          <a href={`/${getSlugFromPathname(pathname)}/${canManage ? 'cabinet' : 'client'}/documents`} style={{ ...linkButton, textDecoration:'none', display:'inline-flex', alignItems:'center' }}>
+                            Ouvrir documents
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ ...copy, marginTop:10, lineHeight:1.7 }}>
+                        {selectedTicket.cabinet_reply || 'Aucune reponse du cabinet pour le moment.'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={detailBlock}>
+                    <div style={titleText}>Document partage</div>
+                    {selectedTicket.attached_document_url ? (
+                      <div style={{ display:'grid', gap:10, marginTop:10 }}>
+                        <div style={copy}>{selectedTicket.attached_document_name || 'Document du cabinet'}</div>
+                        <a href={selectedTicket.attached_document_url} target="_blank" rel="noreferrer" style={{ ...button, textDecoration:'none', display:'inline-flex', width:'fit-content' }}>
+                          Ouvrir le document
+                        </a>
+                      </div>
+                    ) : (
+                      <div style={{ ...copy, marginTop:10 }}>
+                        Aucun document rattache a ce ticket pour le moment.
+                      </div>
+                    )}
+                  </div>
+
+                  {canManage && (
+                    <div style={detailBlock}>
+                      <div style={titleText}>Actions rapides</div>
+                      <div style={{ ...actionRow, marginTop:10 }}>
+                        {selectedTicket.status === 'open' && <button style={button} onClick={() => updateStatus(selectedTicket, 'in_progress')} disabled={saving}>Prendre en charge</button>}
+                        {['open', 'in_progress'].includes(selectedTicket.status) && <button style={{ ...button, background:'#7c3aed' }} onClick={() => updateStatus(selectedTicket, 'waiting_client')} disabled={saving}>Attente client</button>}
+                        {['open', 'in_progress', 'waiting_client'].includes(selectedTicket.status) && <button style={{ ...button, background:'#16a34a' }} onClick={() => updateStatus(selectedTicket, 'resolved')} disabled={saving}>Marquer resolu</button>}
+                        {selectedTicket.status === 'resolved' && <button style={{ ...button, background:'#1f2937' }} onClick={() => updateStatus(selectedTicket, 'closed')} disabled={saving}>Fermer</button>}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </aside>
           </div>
         )}
       </section>

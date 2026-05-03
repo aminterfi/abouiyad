@@ -59,6 +59,13 @@ const itemHead: React.CSSProperties = { display:'flex', justifyContent:'space-be
 const itemMain: React.CSSProperties = { minWidth:0, flex:1 }
 const badges: React.CSSProperties = { display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }
 const dateCol: React.CSSProperties = { fontSize:12, color:'var(--ws-muted)', textAlign:'right', display:'grid', gap:4 }
+const detailLayout: React.CSSProperties = { display:'grid', gridTemplateColumns:'minmax(0, 1.15fr) minmax(320px, 0.85fr)', gap:16, alignItems:'start' }
+const detailPanel: React.CSSProperties = { ...softCard, position:'sticky', top:16 }
+const detailBlock: React.CSSProperties = { border:'1px solid var(--ws-border)', borderRadius:12, padding:14, background:'var(--ws-panel)' }
+const metaGrid: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:10 }
+const metaCell: React.CSSProperties = { padding:12, borderRadius:10, background:'var(--ws-panel-2)', border:'1px solid var(--ws-border)' }
+const responseBox: React.CSSProperties = { ...textarea, minHeight:120 }
+const linkButton: React.CSSProperties = { ...button, background:'var(--ws-panel-2)', color:'var(--ws-text)', border:'1px solid var(--ws-border)' }
 
 function filterButton(active: boolean): React.CSSProperties {
   return {
@@ -129,8 +136,13 @@ export default function DemandesPage() {
   const [details, setDetails] = useState('')
   const [filter, setFilter] = useState('all')
   const [saving, setSaving] = useState(false)
+  const [savingDetail, setSavingDetail] = useState(false)
   const [error, setError] = useState('')
   const [user, setUser] = useState<any>(null)
+  const [selectedId, setSelectedId] = useState('')
+  const [replyDraft, setReplyDraft] = useState('')
+  const [docNameDraft, setDocNameDraft] = useState('')
+  const [docUrlDraft, setDocUrlDraft] = useState('')
 
   const [mode, setMode] = useState<'client' | 'cabinet'>('client')
   const canManage = mode === 'cabinet'
@@ -281,6 +293,61 @@ export default function DemandesPage() {
     ready: rows.filter((r) => r.status === 'ready').length,
     delivered: rows.filter((r) => r.status === 'delivered').length,
   }
+  const selectedRow = filtered.find((row) => row.id === selectedId) || filtered[0] || null
+
+  useEffect(() => {
+    if (!filtered.length) {
+      setSelectedId('')
+      return
+    }
+    if (!selectedId || !filtered.some((row) => row.id === selectedId)) {
+      setSelectedId(filtered[0].id)
+    }
+  }, [filtered, selectedId])
+
+  useEffect(() => {
+    setReplyDraft(selectedRow?.cabinet_reply || '')
+    setDocNameDraft(selectedRow?.attached_document_name || '')
+    setDocUrlDraft(selectedRow?.attached_document_url || '')
+  }, [selectedRow?.id])
+
+  async function saveClientAnswer(row: any) {
+    if (!canManage || !row) return
+    setSavingDetail(true)
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+    const payload = {
+      cabinet_reply: replyDraft.trim() || null,
+      attached_document_name: docNameDraft.trim() || null,
+      attached_document_url: docUrlDraft.trim() || null,
+      response_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    try {
+      const slug = getSlugFromPathname(pathname)
+      try {
+        await updateCabinetOperationalItem(slug, 'demande', row.id, payload)
+      } catch {
+        const { error: err } = await supabase.from('service_requests').update(payload).eq('id', row.id)
+        if (err) throw err
+      }
+
+      sendWorkspaceEmailNotification({
+        scope: 'client',
+        kind: 'demande',
+        action: 'status_updated',
+        companyId: row.company_id,
+        title: row.title,
+        status: row.status,
+        actorName: currentUser.full_name || currentUser.email || null,
+      })
+      setError('')
+      await load()
+    } catch {
+      setError('Impossible d enregistrer la reponse ou le document. Appliquez la migration detail si necessaire.')
+    }
+    setSavingDetail(false)
+  }
 
   return (
     <div style={page}>
@@ -364,9 +431,16 @@ export default function DemandesPage() {
         {filtered.length === 0 ? (
           <div style={copy}>Aucune demande pour ce filtre.</div>
         ) : (
-          <div style={list}>
-            {filtered.map((row: any) => (
-              <article key={row.id} style={item}>
+          <div style={detailLayout}>
+            <div style={list}>
+              {filtered.map((row: any) => {
+                const active = selectedRow?.id === row.id
+                return (
+              <article
+                key={row.id}
+                style={{ ...item, cursor:'pointer', borderColor: active ? 'var(--ws-accent)' : 'var(--ws-border)', boxShadow: active ? '0 0 0 1px var(--ws-accent)' : 'none' }}
+                onClick={() => setSelectedId(row.id)}
+              >
                 <div style={itemHead}>
                   <div style={itemMain}>
                     <div style={badges}>
@@ -418,7 +492,104 @@ export default function DemandesPage() {
                   </div>
                 )}
               </article>
-            ))}
+            )})}
+            </div>
+
+            <aside style={detailPanel}>
+              {!selectedRow ? (
+                <div style={copy}>Selectionnez une demande pour ouvrir son detail.</div>
+              ) : (
+                <>
+                  <div style={head}>
+                    <div>
+                      <div style={{ ...titleText, fontSize:18 }}>{selectedRow.title}</div>
+                      <div style={{ ...copy, marginTop:6 }}>{requestTypeLabel(selectedRow.request_type)}</div>
+                    </div>
+                    {statusBadge(selectedRow.status)}
+                  </div>
+
+                  <ProgressLine status={selectedRow.status} />
+
+                  <div style={metaGrid}>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Entreprise</div>
+                      <div style={{ marginTop:6, fontWeight:700 }}>{mode === 'cabinet' ? (companyLookup[selectedRow.company_id]?.name || 'Client') : (user?.company_name || 'Votre entreprise')}</div>
+                    </div>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Mise a jour</div>
+                      <div style={{ marginTop:6, fontWeight:700 }}>{formatDate(selectedRow.updated_at)}</div>
+                    </div>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Creation</div>
+                      <div style={{ marginTop:6, fontWeight:700 }}>{formatDate(selectedRow.created_at)}</div>
+                    </div>
+                    <div style={metaCell}>
+                      <div style={statLabel}>Statut client</div>
+                      <div style={{ marginTop:6 }}>{statusBadge(selectedRow.status)}</div>
+                    </div>
+                  </div>
+
+                  <div style={detailBlock}>
+                    <div style={titleText}>Demande du client</div>
+                    <div style={{ ...copy, marginTop:8, lineHeight:1.7 }}>{selectedRow.details || 'Aucun detail fourni.'}</div>
+                  </div>
+
+                  <div style={detailBlock}>
+                    <div style={titleText}>Reponse du cabinet</div>
+                    {canManage ? (
+                      <div style={{ display:'grid', gap:10, marginTop:10 }}>
+                        <textarea
+                          style={responseBox}
+                          value={replyDraft}
+                          onChange={(e) => setReplyDraft(e.target.value)}
+                          placeholder="Redigez la reponse visible par le client..."
+                        />
+                        <input
+                          style={field}
+                          value={docNameDraft}
+                          onChange={(e) => setDocNameDraft(e.target.value)}
+                          placeholder="Nom du document partage"
+                        />
+                        <input
+                          style={field}
+                          value={docUrlDraft}
+                          onChange={(e) => setDocUrlDraft(e.target.value)}
+                          placeholder="Lien du document (https://...)"
+                        />
+                        <div style={actionRow}>
+                          <button style={button} onClick={() => saveClientAnswer(selectedRow)} disabled={savingDetail}>
+                            {savingDetail ? '...' : 'Envoyer la reponse'}
+                          </button>
+                          <a href={`/${getSlugFromPathname(pathname)}/${canManage ? 'cabinet' : 'client'}/documents`} style={{ ...linkButton, textDecoration:'none', display:'inline-flex', alignItems:'center' }}>
+                            Ouvrir documents
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ ...copy, marginTop:10, lineHeight:1.7 }}>
+                        {selectedRow.cabinet_reply || 'Aucune reponse du cabinet pour le moment.'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={detailBlock}>
+                    <div style={titleText}>Document partage</div>
+                    {selectedRow.attached_document_url ? (
+                      <div style={{ display:'grid', gap:10, marginTop:10 }}>
+                        <div style={copy}>{selectedRow.attached_document_name || 'Document du cabinet'}</div>
+                        <a href={selectedRow.attached_document_url} target="_blank" rel="noreferrer" style={{ ...button, textDecoration:'none', display:'inline-flex', width:'fit-content' }}>
+                          Ouvrir le document
+                        </a>
+                      </div>
+                    ) : (
+                      <div style={{ ...copy, marginTop:10 }}>
+                        Aucun document rattache a cette demande pour le moment.
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </aside>
           </div>
         )}
       </section>

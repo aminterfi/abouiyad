@@ -168,7 +168,13 @@ export function classifyRealtimeNotificationEvent(
     }
   }
 
-  if (eventType === 'UPDATE' && nextRow?.status && nextRow.status !== prevRow?.status) {
+  if (
+    eventType === 'UPDATE' && (
+      (nextRow?.status && nextRow.status !== prevRow?.status) ||
+      nextRow?.cabinet_reply !== prevRow?.cabinet_reply ||
+      nextRow?.attached_document_url !== prevRow?.attached_document_url
+    )
+  ) {
     return {
       shouldNotify: true,
       eventKind: 'status_update' as NotificationEventKind,
