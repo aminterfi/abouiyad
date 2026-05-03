@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Building2, CreditCard, ExternalLink, Settings2 } from 'lucide-react'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { loadManagedClientWorkspaces } from '@/lib/workspace-client'
+import { fetchCabinetClients } from '@/lib/cabinet-api'
+import { useRealtime } from '@/lib/useRealtime'
 
 function dzd(value: number) {
   return (value || 0).toLocaleString('fr-DZ', { minimumFractionDigits: 0 }) + ' DZD'
@@ -19,44 +19,27 @@ export default function CabinetClientsPage() {
 
   useEffect(() => {
     async function load() {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      if (!user.company_id) return
       setLoading(true)
 
       try {
-        const managed = await loadManagedClientWorkspaces(user.company_id, slug)
-        const enriched = await Promise.all(
-          managed.map(async (company: any) => {
-            const [{ count: demandes }, { count: tickets }, { data: bills }] = await Promise.all([
-              supabase.from('service_requests').select('*', { count: 'exact', head: true }).eq('company_id', company.id),
-              supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('company_id', company.id),
-              supabase.from('bills').select('total_amount,paid_amount,status').eq('company_id', company.id).eq('is_archived', false),
-            ])
-
-            const totals = (bills || []).reduce((acc: any, bill: any) => {
-              acc.total += Number(bill.total_amount || 0)
-              acc.paid += Number(bill.paid_amount || 0)
-              return acc
-            }, { total: 0, paid: 0 })
-
-            return {
-              ...company,
-              demandes: demandes || 0,
-              tickets: tickets || 0,
-              billed: totals.total,
-              paid: totals.paid,
-            }
-          }),
-        )
-
-        setCompanies(enriched)
+        const data = await fetchCabinetClients(slug)
+        setCompanies(data.companies || [])
       } finally {
         setLoading(false)
       }
     }
 
     load()
-  }, [])
+  }, [slug])
+
+  useRealtime(
+    ['service_requests', 'support_tickets', 'bills'],
+    async () => {
+      const data = await fetchCabinetClients(slug)
+      setCompanies(data.companies || [])
+    },
+    { intervalMs: 4000, deps: [slug] },
+  )
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
+import { fetchCabinetDemandes, updateCabinetOperationalItem } from '@/lib/cabinet-api'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -141,6 +142,15 @@ export default function DemandesPage() {
 
     const scope = await loadOperationalScope(currentUser.company_id, pathname)
     setMode(scope.mode)
+    if (scope.mode === 'cabinet') {
+      const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
+      const data = await fetchCabinetDemandes(slug)
+      setManagedCompanies(data.companies || [])
+      setRows(data.rows || [])
+      setError('')
+      return
+    }
+
     setManagedCompanies(scope.companies)
 
     const { data, error: err } = await supabase
@@ -214,9 +224,14 @@ export default function DemandesPage() {
       payload.completed_at = null
     }
 
-    const { error: err } = await supabase.from('service_requests').update(payload).eq('id', row.id)
-    if (err) setError('Impossible de mettre a jour le statut.')
-    else {
+    try {
+      if (canManage) {
+        const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
+        await updateCabinetOperationalItem(slug, 'demande', row.id, payload)
+      } else {
+        const { error: err } = await supabase.from('service_requests').update(payload).eq('id', row.id)
+        if (err) throw err
+      }
       sendWorkspaceEmailNotification({
         scope: 'client',
         kind: 'demande',
@@ -226,6 +241,8 @@ export default function DemandesPage() {
         status: nextStatus,
         actorName: currentUser.full_name || currentUser.email || null,
       })
+    } catch {
+      setError('Impossible de mettre a jour le statut.')
     }
     setSaving(false)
     load()

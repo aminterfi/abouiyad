@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowUpRight, BellRing, CreditCard, FileArchive, Ticket } from 'lucide-react'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { loadManagedClientWorkspaces } from '@/lib/workspace-client'
+import { fetchCabinetSummary } from '@/lib/cabinet-api'
+import { useRealtime } from '@/lib/useRealtime'
 
 export default function CabinetHomePage() {
   const { slug } = useParams() as { slug: string }
@@ -22,47 +22,42 @@ export default function CabinetHomePage() {
 
   useEffect(() => {
     async function load() {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      if (!user.company_id) return
-
       setLoading(true)
       try {
-        const managed = await loadManagedClientWorkspaces(user.company_id, slug)
-        const ids = managed.map((company: any) => company.id).filter(Boolean)
-        setCompanies(managed)
-
-        if (ids.length > 0) {
-          const [{ data: demandes }, { data: tickets }, { count: documents }] = await Promise.all([
-            supabase.from('service_requests').select('id,status,company_id').in('company_id', ids),
-            supabase.from('support_tickets').select('id,status,company_id').in('company_id', ids),
-            supabase.from('document_archive_files').select('*', { count: 'exact', head: true }).in('company_id', ids),
-          ])
-
-          setStats({
-            totalClients: managed.length,
-            totalDemandes: (demandes || []).length,
-            pendingDemandes: (demandes || []).filter((row: any) => ['pending', 'in_review', 'approved', 'in_progress'].includes(row.status)).length,
-            totalTickets: (tickets || []).length,
-            openTickets: (tickets || []).filter((row: any) => ['open', 'in_progress', 'waiting_client'].includes(row.status)).length,
-            totalDocuments: documents || 0,
-          })
-        } else {
-          setStats({
-            totalClients: 0,
-            totalDemandes: 0,
-            pendingDemandes: 0,
-            totalTickets: 0,
-            openTickets: 0,
-            totalDocuments: 0,
-          })
-        }
+        const data = await fetchCabinetSummary(slug)
+        setCompanies(data.companies || [])
+        setStats({
+          totalClients: data.totalClients || 0,
+          totalDemandes: data.totalDemandes || 0,
+          pendingDemandes: data.pendingDemandes || 0,
+          totalTickets: data.totalTickets || 0,
+          openTickets: data.openTickets || 0,
+          totalDocuments: data.totalDocuments || 0,
+        })
       } finally {
         setLoading(false)
       }
     }
 
     load()
-  }, [])
+  }, [slug])
+
+  useRealtime(
+    ['service_requests', 'support_tickets', 'document_archive_files'],
+    async () => {
+      const data = await fetchCabinetSummary(slug)
+      setCompanies(data.companies || [])
+      setStats({
+        totalClients: data.totalClients || 0,
+        totalDemandes: data.totalDemandes || 0,
+        pendingDemandes: data.pendingDemandes || 0,
+        totalTickets: data.totalTickets || 0,
+        openTickets: data.openTickets || 0,
+        totalDocuments: data.totalDocuments || 0,
+      })
+    },
+    { intervalMs: 4000, deps: [slug] },
+  )
 
   const topClients = useMemo(
     () => companies.slice(0, 5),

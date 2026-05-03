@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
+import { fetchCabinetTickets, updateCabinetOperationalItem } from '@/lib/cabinet-api'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -120,6 +121,15 @@ export default function TicketsPage() {
     if (!currentUser.company_id) return
     const scope = await loadOperationalScope(currentUser.company_id, pathname)
     setMode(scope.mode)
+    if (scope.mode === 'cabinet') {
+      const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
+      const data = await fetchCabinetTickets(slug)
+      setManagedCompanies(data.companies || [])
+      setTickets(data.rows || [])
+      setError('')
+      return
+    }
+
     setManagedCompanies(scope.companies)
     const { data, error: err } = await supabase
       .from('support_tickets')
@@ -172,12 +182,12 @@ export default function TicketsPage() {
     if (!canManage) return
     setSaving(true)
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-    const { error: err } = await supabase
-      .from('support_tickets')
-      .update({ status: nextStatus, updated_at: new Date().toISOString() })
-      .eq('id', ticket.id)
-    if (err) setError('Impossible de mettre a jour le ticket.')
-    else {
+    try {
+      const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
+      await updateCabinetOperationalItem(slug, 'ticket', ticket.id, {
+        status: nextStatus,
+        updated_at: new Date().toISOString(),
+      })
       sendWorkspaceEmailNotification({
         scope: 'client',
         kind: 'ticket',
@@ -187,6 +197,8 @@ export default function TicketsPage() {
         status: nextStatus,
         actorName: currentUser.full_name || currentUser.email || null,
       })
+    } catch {
+      setError('Impossible de mettre a jour le ticket.')
     }
     setSaving(false)
     load()
