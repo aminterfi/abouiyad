@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
+import { useRealtime } from '@/lib/useRealtime'
 
 function dzd(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:2})+' DZD' }
 function dzdShort(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:0})+' DZD' }
@@ -570,6 +571,7 @@ const [pdfModalHtml, setPdfModalHtml] = useState<string | null>(null)
     }
   }, [])
   useEffect(() => { fetchAll() }, [])
+  useRealtime(['bills', 'payments', 'bill_items', 'clients', 'products'], fetchAll, { intervalMs: 4000 })
 
   useEffect(() => {
     if (view === 'new') {

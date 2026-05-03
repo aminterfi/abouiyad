@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRealtime } from '@/lib/useRealtime'
 
 function dzd(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:2})+' DZD' }
 
@@ -25,6 +26,7 @@ export default function ClientsPage() {
   const [error, setError] = useState('')
 
   useEffect(() => { fetchAll() }, [])
+  useRealtime(['clients', 'bills'], fetchAll, { intervalMs: 4000 })
 
   async function fetchAll() {
     setLoading(true)

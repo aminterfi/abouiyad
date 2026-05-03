@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useRealtime } from '@/lib/useRealtime'
 
 export default function InventairePage() {
   const { slug } = useParams() as { slug: string }
@@ -13,6 +14,7 @@ export default function InventairePage() {
   const [msg, setMsg] = useState('')
 
   useEffect(()=>{ load() },[])
+  useRealtime(['products', 'stock_movements'], load, { intervalMs: 4000 })
 
   async function load() {
     const u = JSON.parse(localStorage.getItem('user')||'{}')

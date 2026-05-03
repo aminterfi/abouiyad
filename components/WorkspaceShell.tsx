@@ -226,6 +226,10 @@ export default function WorkspaceShell({
           oscillator.start(startAt)
           oscillator.stop(startAt + 0.16)
         })
+
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(isCabinetSide ? [120, 60, 140] : [80, 40, 80, 40, 120])
+        }
       } catch {}
     }
 
@@ -320,7 +324,7 @@ export default function WorkspaceShell({
       window.addEventListener('pointerdown', handleFirstPointerDown, { once: true })
     })
 
-    const timer = window.setInterval(run, 8000)
+    const timer = window.setInterval(run, 4000)
 
     return () => {
       active = false

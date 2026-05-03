@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { loadOperationalScope } from '@/lib/workspace-client'
+import { useRealtime } from '@/lib/useRealtime'
 
 const ARCHIVE_BUCKET = 'document-archive'
 const ACCEPT_ATTR = '.pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv'
@@ -380,6 +381,16 @@ export default function DocumentsPage() {
     if (!activeCompanyId) return
     load(activeCompanyId)
   }, [activeCompanyId])
+
+  useRealtime(
+    ['document_exercise_folders', 'document_archive_files'],
+    () => load(activeCompanyId || undefined),
+    {
+      enabled: Boolean(user?.company_id),
+      intervalMs: 4000,
+      deps: [pathname, activeCompanyId, mode, user?.company_id],
+    },
+  )
 
   const companyLookup = useMemo(
     () => Object.fromEntries(managedCompanies.map((company: any) => [company.id, company])),

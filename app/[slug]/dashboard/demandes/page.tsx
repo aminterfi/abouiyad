@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
+import { useRealtime } from '@/lib/useRealtime'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -157,38 +158,7 @@ export default function DemandesPage() {
   }
 
   useEffect(() => { load() }, [pathname])
-
-  useEffect(() => {
-    let active = true
-    let channel: ReturnType<typeof supabase.channel> | null = null
-
-    async function setup() {
-      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-      if (!currentUser.company_id) return
-      const scope = await loadOperationalScope(currentUser.company_id, pathname)
-      if (!active) return
-      const allowedCompanyIds = new Set(scope.companyIds)
-
-      channel = supabase
-        .channel(`demandes-live-${pathname}-${currentUser.id || currentUser.company_id}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, (payload: any) => {
-          const companyId = payload?.new?.company_id || payload?.old?.company_id
-          if (!companyId || !allowedCompanyIds.has(companyId)) return
-          load()
-        })
-        .subscribe()
-    }
-
-    setup()
-    const timer = window.setInterval(() => {
-      if (active) load()
-    }, 8000)
-    return () => {
-      active = false
-      window.clearInterval(timer)
-      if (channel) supabase.removeChannel(channel)
-    }
-  }, [pathname])
+  useRealtime(['service_requests'], load, { intervalMs: 4000, deps: [pathname] })
 
   async function createRequest() {
     setError('')

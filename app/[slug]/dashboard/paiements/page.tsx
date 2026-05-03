@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRealtime } from '@/lib/useRealtime'
 
 function dzd(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:2})+' DZD' }
 function dzdS(v: number) { return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:0})+' DZD' }
@@ -121,6 +122,7 @@ export default function PaiementsPage() {
     window.addEventListener('message', closePdf)
     return () => window.removeEventListener('message', closePdf)
   }, [])
+  useRealtime(['payments', 'bills', 'clients'], fetch, { intervalMs: 4000 })
 
   async function fetch() {
     setLoading(true)

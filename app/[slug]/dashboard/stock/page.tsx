@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useRealtime } from '@/lib/useRealtime'
 
 function dzd(v:number){return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:2})+' DZD'}
 
@@ -21,6 +22,7 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(()=>{ load() },[])
+  useRealtime(['products', 'stock_movements'], load, { intervalMs: 4000 })
 
   async function load() {
     const u = JSON.parse(localStorage.getItem('user')||'{}')
