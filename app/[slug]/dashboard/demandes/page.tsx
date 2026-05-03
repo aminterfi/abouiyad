@@ -351,39 +351,16 @@ export default function DemandesPage() {
 
   return (
     <div style={page}>
-      <div style={{ ...grid, gridTemplateColumns: canManage ? 'minmax(0, 1.15fr) minmax(320px, 0.85fr)' : '1fr' }}>
-        <section style={card}>
-          <div style={head}>
-            <div>
-              <div style={titleText}>Nouvelle demande client</div>
-              <div style={copy}>G12, documents generes, documents prepares, ou service sur mesure.</div>
-            </div>
-            {statusBadge('pending')}
-          </div>
-
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:10 }}>
-            <select style={field} value={requestType} onChange={(e)=>setRequestType(e.target.value)}>
-              <option value="g12">G12</option>
-              <option value="auto_document">Document auto-genere</option>
-              <option value="prepared_document">Document a preparer</option>
-              <option value="other">Autre service</option>
-            </select>
-            <input style={field} value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Titre de la demande" />
-          </div>
-
-          <textarea style={textarea} value={details} onChange={(e)=>setDetails(e.target.value)} placeholder="Details, echeance, documents necessaires..." />
-
-          {error && <div className="docs-error"><span>{error}</span></div>}
-
-          <div style={actions}>
-            <div style={copy}>Les mises a jour de statut seront visibles au client.</div>
-            <button style={button} onClick={createRequest} disabled={saving}>{saving ? '...' : 'Envoyer la demande'}</button>
-          </div>
-        </section>
-
-        {canManage && (
+      <div style={{ ...grid, gridTemplateColumns: canManage ? '1fr' : '1fr' }}>
+        {canManage ? (
           <section style={softCard}>
-            <div style={titleText}>Vue comptable</div>
+            <div style={head}>
+              <div>
+                <div style={titleText}>Vue comptable</div>
+                <div style={copy}>Le cabinet traite les demandes clients, repond et partage les documents depuis ce module.</div>
+              </div>
+              <span className="ops-pill" style={{ color:'#2563EB', background:'rgba(37,99,235,0.12)' }}>Cabinet seulement</span>
+            </div>
             <div style={statsGrid}>
               <div style={stat}>
                 <div style={statLabel}>Nouvelles</div>
@@ -402,7 +379,36 @@ export default function DemandesPage() {
                 <div style={statValue}>{counts.delivered}</div>
               </div>
             </div>
-            <div style={copy}>Utilisez les statuts pour tenir le client informe sans sortir de l'application.</div>
+            <div style={copy}>Les clients soumettent les demandes depuis leur espace. Le cabinet les pilote ici.</div>
+          </section>
+        ) : (
+          <section style={card}>
+            <div style={head}>
+              <div>
+                <div style={titleText}>Nouvelle demande client</div>
+                <div style={copy}>G12, documents generes, documents prepares, ou service sur mesure.</div>
+              </div>
+              {statusBadge('pending')}
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:10 }}>
+              <select style={field} value={requestType} onChange={(e)=>setRequestType(e.target.value)}>
+                <option value="g12">G12</option>
+                <option value="auto_document">Document auto-genere</option>
+                <option value="prepared_document">Document a preparer</option>
+                <option value="other">Autre service</option>
+              </select>
+              <input style={field} value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Titre de la demande" />
+            </div>
+
+            <textarea style={textarea} value={details} onChange={(e)=>setDetails(e.target.value)} placeholder="Details, echeance, documents necessaires..." />
+
+            {error && <div className="docs-error"><span>{error}</span></div>}
+
+            <div style={actions}>
+              <div style={copy}>Les mises a jour de statut seront visibles au client.</div>
+              <button style={button} onClick={createRequest} disabled={saving}>{saving ? '...' : 'Envoyer la demande'}</button>
+            </div>
           </section>
         )}
       </div>

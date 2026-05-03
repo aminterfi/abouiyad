@@ -308,39 +308,16 @@ export default function TicketsPage() {
 
   return (
     <div style={page}>
-      <div style={{ ...grid, gridTemplateColumns: canManage ? 'minmax(0, 1.05fr) minmax(320px, 0.95fr)' : '1fr' }}>
-        <section style={card}>
-          <div style={head}>
-            <div>
-              <div style={titleText}>Nouveau ticket client</div>
-              <div style={copy}>Le support client reste trace et visible dans le workspace.</div>
-            </div>
-            {badge('open')}
-          </div>
-
-          <div style={{ ...fieldGrid, gridTemplateColumns:'2fr 1fr' }}>
-            <input style={field} value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Objet du ticket" />
-            <select style={field} value={priority} onChange={(e)=>setPriority(e.target.value)}>
-              <option value="low">Priorite basse</option>
-              <option value="normal">Priorite normale</option>
-              <option value="high">Priorite haute</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
-
-          <textarea style={textarea} value={description} onChange={(e)=>setDescription(e.target.value)} placeholder="Decrivez la demande ou le probleme..." />
-
-          {error && <div className="docs-error"><span>{error}</span></div>}
-
-          <div style={actions}>
-            <div style={copy}>Le client voit ensuite le statut du ticket.</div>
-            <button style={button} onClick={createTicket} disabled={saving}>{saving ? '...' : 'Creer ticket'}</button>
-          </div>
-        </section>
-
-        {canManage && (
+      <div style={{ ...grid, gridTemplateColumns: '1fr' }}>
+        {canManage ? (
           <section style={softCard}>
-            <div style={titleText}>Vue support</div>
+            <div style={head}>
+              <div>
+                <div style={titleText}>Vue support</div>
+                <div style={copy}>Le cabinet suit les tickets, repond au client et partage les elements utiles depuis ce module.</div>
+              </div>
+              <span className="ops-pill" style={{ color:'#2563EB', background:'rgba(37,99,235,0.12)' }}>Cabinet seulement</span>
+            </div>
             <div style={statsGrid}>
               <div style={stat}>
                 <div style={statLabel}>Ouverts</div>
@@ -359,7 +336,36 @@ export default function TicketsPage() {
                 <div style={statValue}>{resolvedCount}</div>
               </div>
             </div>
-            <div style={copy}>Pilotez le support avec des statuts visibles par le client.</div>
+            <div style={copy}>Les clients ouvrent les tickets depuis leur espace. Le cabinet les traite ici.</div>
+          </section>
+        ) : (
+          <section style={card}>
+            <div style={head}>
+              <div>
+                <div style={titleText}>Nouveau ticket client</div>
+                <div style={copy}>Le support client reste trace et visible dans le workspace.</div>
+              </div>
+              {badge('open')}
+            </div>
+
+            <div style={{ ...fieldGrid, gridTemplateColumns:'2fr 1fr' }}>
+              <input style={field} value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Objet du ticket" />
+              <select style={field} value={priority} onChange={(e)=>setPriority(e.target.value)}>
+                <option value="low">Priorite basse</option>
+                <option value="normal">Priorite normale</option>
+                <option value="high">Priorite haute</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+
+            <textarea style={textarea} value={description} onChange={(e)=>setDescription(e.target.value)} placeholder="Decrivez la demande ou le probleme..." />
+
+            {error && <div className="docs-error"><span>{error}</span></div>}
+
+            <div style={actions}>
+              <div style={copy}>Le client voit ensuite le statut du ticket.</div>
+              <button style={button} onClick={createTicket} disabled={saving}>{saving ? '...' : 'Creer ticket'}</button>
+            </div>
           </section>
         )}
       </div>
