@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
-import { fetchCabinetDemandes, updateCabinetOperationalItem } from '@/lib/cabinet-api'
+import { fetchCabinetDemandes, getSlugFromPathname, updateCabinetOperationalItem } from '@/lib/cabinet-api'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -143,12 +143,31 @@ export default function DemandesPage() {
     const scope = await loadOperationalScope(currentUser.company_id, pathname)
     setMode(scope.mode)
     if (scope.mode === 'cabinet') {
-      const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
-      const data = await fetchCabinetDemandes(slug)
-      setManagedCompanies(data.companies || [])
-      setRows(data.rows || [])
-      setError('')
-      return
+      const slug = getSlugFromPathname(pathname)
+      try {
+        const data = await fetchCabinetDemandes(slug)
+        setManagedCompanies(data.companies || [])
+        setRows(data.rows || [])
+        setError('')
+        return
+      } catch {
+        const { data, error: err } = await supabase
+          .from('service_requests')
+          .select('*')
+          .in('company_id', scope.companyIds)
+          .order('created_at', { ascending: false })
+
+        setManagedCompanies(scope.companies)
+        if (err) {
+          setRows([])
+          setError('Demandes cabinet indisponibles. Verifiez SUPABASE_SERVICE_ROLE_KEY dans Vercel/local.')
+          return
+        }
+
+        setRows(data || [])
+        setError('')
+        return
+      }
     }
 
     setManagedCompanies(scope.companies)
@@ -226,7 +245,7 @@ export default function DemandesPage() {
 
     try {
       if (canManage) {
-        const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
+        const slug = getSlugFromPathname(pathname)
         await updateCabinetOperationalItem(slug, 'demande', row.id, payload)
       } else {
         const { error: err } = await supabase.from('service_requests').update(payload).eq('id', row.id)

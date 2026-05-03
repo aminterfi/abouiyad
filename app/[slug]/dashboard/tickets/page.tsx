@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
-import { fetchCabinetTickets, updateCabinetOperationalItem } from '@/lib/cabinet-api'
+import { fetchCabinetTickets, getSlugFromPathname, updateCabinetOperationalItem } from '@/lib/cabinet-api'
 
 const page: React.CSSProperties = { display:'grid', gap:18 }
 const grid: React.CSSProperties = { display:'grid', gap:18 }
@@ -122,12 +122,31 @@ export default function TicketsPage() {
     const scope = await loadOperationalScope(currentUser.company_id, pathname)
     setMode(scope.mode)
     if (scope.mode === 'cabinet') {
-      const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
-      const data = await fetchCabinetTickets(slug)
-      setManagedCompanies(data.companies || [])
-      setTickets(data.rows || [])
-      setError('')
-      return
+      const slug = getSlugFromPathname(pathname)
+      try {
+        const data = await fetchCabinetTickets(slug)
+        setManagedCompanies(data.companies || [])
+        setTickets(data.rows || [])
+        setError('')
+        return
+      } catch {
+        setManagedCompanies(scope.companies)
+        const { data, error: err } = await supabase
+          .from('support_tickets')
+          .select('*')
+          .in('company_id', scope.companyIds)
+          .order('created_at', { ascending: false })
+
+        if (err) {
+          setTickets([])
+          setError('Tickets cabinet indisponibles. Verifiez SUPABASE_SERVICE_ROLE_KEY dans Vercel/local.')
+          return
+        }
+
+        setTickets(data || [])
+        setError('')
+        return
+      }
     }
 
     setManagedCompanies(scope.companies)
@@ -183,7 +202,7 @@ export default function TicketsPage() {
     setSaving(true)
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
     try {
-      const slug = pathname.split('/').filter(Boolean)[0] || 'rs'
+      const slug = getSlugFromPathname(pathname)
       await updateCabinetOperationalItem(slug, 'ticket', ticket.id, {
         status: nextStatus,
         updated_at: new Date().toISOString(),

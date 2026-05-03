@@ -8,6 +8,10 @@ async function parseJson(response: Response) {
   return data
 }
 
+export function getSlugFromPathname(pathname: string) {
+  return pathname.split('/').filter(Boolean)[0] || 'rs'
+}
+
 export async function fetchCabinetSummary(slug: string) {
   const response = await fetch(`/api/cabinet/operational?kind=summary&slug=${encodeURIComponent(slug)}`, {
     cache: 'no-store',
