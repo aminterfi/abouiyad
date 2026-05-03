@@ -202,11 +202,22 @@ export default function TicketsPage() {
     setSaving(true)
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
     try {
-      const slug = getSlugFromPathname(pathname)
-      await updateCabinetOperationalItem(slug, 'ticket', ticket.id, {
+      const payload = {
         status: nextStatus,
         updated_at: new Date().toISOString(),
-      })
+      }
+      const slug = getSlugFromPathname(pathname)
+
+      try {
+        await updateCabinetOperationalItem(slug, 'ticket', ticket.id, payload)
+      } catch {
+        const { error: err } = await supabase
+          .from('support_tickets')
+          .update(payload)
+          .eq('id', ticket.id)
+        if (err) throw err
+      }
+
       sendWorkspaceEmailNotification({
         scope: 'client',
         kind: 'ticket',

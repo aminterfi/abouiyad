@@ -246,7 +246,12 @@ export default function DemandesPage() {
     try {
       if (canManage) {
         const slug = getSlugFromPathname(pathname)
-        await updateCabinetOperationalItem(slug, 'demande', row.id, payload)
+        try {
+          await updateCabinetOperationalItem(slug, 'demande', row.id, payload)
+        } catch {
+          const { error: err } = await supabase.from('service_requests').update(payload).eq('id', row.id)
+          if (err) throw err
+        }
       } else {
         const { error: err } = await supabase.from('service_requests').update(payload).eq('id', row.id)
         if (err) throw err
