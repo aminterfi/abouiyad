@@ -6,6 +6,7 @@ import { ArrowUpRight, BellRing, CreditCard, FileArchive, Ticket } from 'lucide-
 import { useParams } from 'next/navigation'
 import { fetchCabinetSummary } from '@/lib/cabinet-api'
 import { useRealtime } from '@/lib/useRealtime'
+import { loadManagedClientWorkspaces } from '@/lib/workspace-client'
 
 export default function CabinetHomePage() {
   const { slug } = useParams() as { slug: string }
@@ -19,6 +20,18 @@ export default function CabinetHomePage() {
     totalDocuments: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  async function fallbackLoad() {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!user.company_id) return
+    const managed = await loadManagedClientWorkspaces(user.company_id, slug)
+    setCompanies(managed || [])
+    setStats((prev) => ({
+      ...prev,
+      totalClients: (managed || []).length,
+    }))
+  }
 
   useEffect(() => {
     async function load() {
@@ -34,6 +47,10 @@ export default function CabinetHomePage() {
           openTickets: data.openTickets || 0,
           totalDocuments: data.totalDocuments || 0,
         })
+        setLoadError('')
+      } catch (error: any) {
+        setLoadError(error?.message || 'Chargement cabinet indisponible')
+        await fallbackLoad()
       } finally {
         setLoading(false)
       }
@@ -45,16 +62,21 @@ export default function CabinetHomePage() {
   useRealtime(
     ['service_requests', 'support_tickets', 'document_archive_files'],
     async () => {
-      const data = await fetchCabinetSummary(slug)
-      setCompanies(data.companies || [])
-      setStats({
-        totalClients: data.totalClients || 0,
-        totalDemandes: data.totalDemandes || 0,
-        pendingDemandes: data.pendingDemandes || 0,
-        totalTickets: data.totalTickets || 0,
-        openTickets: data.openTickets || 0,
-        totalDocuments: data.totalDocuments || 0,
-      })
+      try {
+        const data = await fetchCabinetSummary(slug)
+        setCompanies(data.companies || [])
+        setStats({
+          totalClients: data.totalClients || 0,
+          totalDemandes: data.totalDemandes || 0,
+          pendingDemandes: data.pendingDemandes || 0,
+          totalTickets: data.totalTickets || 0,
+          openTickets: data.openTickets || 0,
+          totalDocuments: data.totalDocuments || 0,
+        })
+        setLoadError('')
+      } catch {
+        await fallbackLoad()
+      }
     },
     { intervalMs: 4000, deps: [slug] },
   )
@@ -71,6 +93,11 @@ export default function CabinetHomePage() {
   return (
     <div className="cabinet-page">
       <section className="cabinet-hero">
+        {loadError ? (
+          <div style={{ marginBottom:12, color:'#f59e0b', fontSize:12 }}>
+            {loadError}. Affichage portefeuille en mode secours.
+          </div>
+        ) : null}
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
           <span className="workspace-chip accent">
             <BellRing size={13} />

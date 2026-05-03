@@ -15,6 +15,44 @@ async function loadCabinetCompanies(admin: ReturnType<typeof createAdminSupabase
     throw new Error('Cabinet introuvable')
   }
 
+  if (slug === 'rs') {
+    const { data: adminCompanies, error: adminCompaniesError } = await admin.rpc('admin_list_companies')
+    if (!adminCompaniesError && (adminCompanies || []).length > 0) {
+      const companies = (adminCompanies || [])
+        .filter((company: any) => company?.company_id && company?.slug && company.slug !== slug)
+        .map((company: any) => ({
+          id: company.company_id,
+          name: company.name,
+          slug: company.slug,
+          owner_email: company.owner_email || null,
+          active_modules: [],
+        }))
+
+      const ids = companies.map((company: any) => company.id).filter(Boolean)
+      const { data: modules } = ids.length
+        ? await admin
+            .from('company_module_access')
+            .select('company_id,module_key,is_enabled')
+            .in('company_id', ids)
+            .eq('is_enabled', true)
+        : { data: [] as any[] }
+
+      const moduleMap: Record<string, string[]> = {}
+      for (const row of (modules as any[]) || []) {
+        if (!moduleMap[row.company_id]) moduleMap[row.company_id] = []
+        moduleMap[row.company_id].push(row.module_key)
+      }
+
+      return {
+        cabinet,
+        companies: companies.map((company: any) => ({
+          ...company,
+          active_modules: moduleMap[company.id] || [],
+        })),
+      }
+    }
+  }
+
   const { data: companies, error: companiesError } = await admin
     .from('companies')
     .select('id,name,slug')
@@ -68,7 +106,7 @@ export async function GET(request: Request) {
 
     const admin = createAdminSupabaseClient()
     const { companies } = await loadCabinetCompanies(admin, slug)
-    const companyIds = companies.map((company) => company.id)
+    const companyIds = companies.map((company: any) => company.id)
 
     if (kind === 'summary') {
       if (companyIds.length === 0) {
@@ -115,9 +153,9 @@ export async function GET(request: Request) {
       const ticketsMap = aggregateByCompany(tickets || [])
       const billsMap = aggregateByCompany(bills || [])
 
-      const enriched = companies.map((company) => {
+      const enriched = companies.map((company: any) => {
         const companyBills = billsMap[company.id] || []
-        const totals = companyBills.reduce((acc, bill) => {
+        const totals = companyBills.reduce((acc: any, bill: any) => {
           acc.total += Number(bill.total_amount || 0)
           acc.paid += Number(bill.paid_amount || 0)
           return acc
@@ -157,7 +195,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
       }
 
-      const targetCompany = companies.find((company) => company.id === companyId)
+      const targetCompany = companies.find((company: any) => company.id === companyId)
       if (!targetCompany) {
         return NextResponse.json({ error: 'Company not managed by cabinet' }, { status: 404 })
       }

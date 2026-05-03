@@ -6,6 +6,7 @@ import { Building2, CreditCard, ExternalLink, Settings2 } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { fetchCabinetClients } from '@/lib/cabinet-api'
 import { useRealtime } from '@/lib/useRealtime'
+import { loadManagedClientWorkspaces } from '@/lib/workspace-client'
 
 function dzd(value: number) {
   return (value || 0).toLocaleString('fr-DZ', { minimumFractionDigits: 0 }) + ' DZD'
@@ -16,6 +17,20 @@ export default function CabinetClientsPage() {
   const [companies, setCompanies] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  async function fallbackLoad() {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!user.company_id) return
+    const managed = await loadManagedClientWorkspaces(user.company_id, slug)
+    setCompanies((managed || []).map((company: any) => ({
+      ...company,
+      demandes: company.demandes || 0,
+      tickets: company.tickets || 0,
+      billed: company.billed || 0,
+      paid: company.paid || 0,
+    })))
+  }
 
   useEffect(() => {
     async function load() {
@@ -24,6 +39,10 @@ export default function CabinetClientsPage() {
       try {
         const data = await fetchCabinetClients(slug)
         setCompanies(data.companies || [])
+        setLoadError('')
+      } catch (error: any) {
+        setLoadError(error?.message || 'Chargement clients indisponible')
+        await fallbackLoad()
       } finally {
         setLoading(false)
       }
@@ -35,8 +54,13 @@ export default function CabinetClientsPage() {
   useRealtime(
     ['service_requests', 'support_tickets', 'bills'],
     async () => {
-      const data = await fetchCabinetClients(slug)
-      setCompanies(data.companies || [])
+      try {
+        const data = await fetchCabinetClients(slug)
+        setCompanies(data.companies || [])
+        setLoadError('')
+      } catch {
+        await fallbackLoad()
+      }
     },
     { intervalMs: 4000, deps: [slug] },
   )
@@ -58,6 +82,11 @@ export default function CabinetClientsPage() {
           <div>
             <div className="workspace-section-title">Clients geres</div>
             <div className="workspace-section-copy">Portefeuille client, charge active et acces rapides de configuration.</div>
+            {loadError ? (
+              <div style={{ marginTop:8, color:'#f59e0b', fontSize:12 }}>
+                {loadError}. Affichage portefeuille en mode secours.
+              </div>
+            ) : null}
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <input
