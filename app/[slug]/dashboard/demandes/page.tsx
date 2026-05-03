@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
@@ -130,6 +130,8 @@ function ProgressLine({ status }: { status: string }) {
 
 export default function DemandesPage() {
   const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [rows, setRows] = useState<any[]>([])
   const [managedCompanies, setManagedCompanies] = useState<any[]>([])
   const [requestType, setRequestType] = useState('g12')
@@ -207,7 +209,7 @@ export default function DemandesPage() {
     if (!title.trim()) return
     setSaving(true)
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-    const { error: err } = await supabase.from('service_requests').insert({
+    const { data: createdRow, error: err } = await supabase.from('service_requests').insert({
       request_type: requestType,
       title: title.trim(),
       details: details.trim() || null,
@@ -215,7 +217,7 @@ export default function DemandesPage() {
       requires_generated_document: requestType === 'g12' || requestType === 'auto_document',
       company_id: currentUser.company_id,
       created_by: currentUser.id,
-    })
+    }).select('id').single()
     if (err) {
       setError('Impossible de creer la demande.')
     } else if (mode === 'client') {
@@ -223,6 +225,7 @@ export default function DemandesPage() {
         audience: 'cabinet',
         kind: 'demande',
         companyId: currentUser.company_id,
+        entityId: createdRow?.id || null,
         title: title.trim(),
         message: 'Nouvelle demande client a traiter.',
         status: 'pending',
@@ -314,6 +317,12 @@ export default function DemandesPage() {
   const selectedRow = filtered.find((row) => row.id === selectedId) || filtered[0] || null
 
   useEffect(() => {
+    const selectedFromQuery = searchParams?.get('selected') || ''
+    if (selectedFromQuery && filtered.some((row) => row.id === selectedFromQuery)) {
+      setSelectedId(selectedFromQuery)
+      return
+    }
+
     if (!filtered.length) {
       setSelectedId('')
       return
@@ -321,7 +330,7 @@ export default function DemandesPage() {
     if (!selectedId || !filtered.some((row) => row.id === selectedId)) {
       setSelectedId(filtered[0].id)
     }
-  }, [filtered, selectedId])
+  }, [filtered, selectedId, searchParams])
 
   useEffect(() => {
     setReplyDraft(selectedRow?.cabinet_reply || '')
@@ -472,7 +481,10 @@ export default function DemandesPage() {
               <article
                 key={row.id}
                 style={{ ...item, cursor:'pointer', borderColor: active ? 'var(--ws-accent)' : 'var(--ws-border)', boxShadow: active ? '0 0 0 1px var(--ws-accent)' : 'none' }}
-                onClick={() => setSelectedId(row.id)}
+                onClick={() => {
+                  setSelectedId(row.id)
+                  router.replace(`${pathname}?selected=${encodeURIComponent(row.id)}`, { scroll: false })
+                }}
               >
                 <div style={itemHead}>
                   <div style={itemMain}>

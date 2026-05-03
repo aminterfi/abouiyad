@@ -24,6 +24,16 @@ export type WorkspaceNotificationContext = {
   companyLookup: Record<string, string>
 }
 
+function buildNotificationHref(
+  context: WorkspaceNotificationContext,
+  kind: 'demande' | 'ticket',
+  id: string | null | undefined,
+) {
+  const base = `${context.routeBase}/${kind === 'demande' ? 'demandes' : 'tickets'}`
+  if (!id) return base
+  return `${base}?selected=${encodeURIComponent(id)}`
+}
+
 function occurredAt(row: any) {
   return row?.updated_at || row?.created_at || new Date().toISOString()
 }
@@ -111,6 +121,15 @@ export function buildWorkspaceNotifications(
   const items: WorkspaceNotification[] = []
 
   for (const row of demandes || []) {
+    const isClientUpdate =
+      row.status !== 'pending' ||
+      row.updated_at !== row.created_at ||
+      row.response_updated_at ||
+      row.cabinet_reply ||
+      row.attached_document_url
+
+    if (!context.isCabinet && !isClientUpdate) continue
+
     items.push({
       id: `demande-${row.id}`,
       kind: 'demande',
@@ -119,13 +138,22 @@ export function buildWorkspaceNotifications(
       status: row.status || 'pending',
       companyId: row.company_id,
       companyName: context.isCabinet ? (context.companyLookup[row.company_id] || 'Client') : (user.company_name || 'Votre entreprise'),
-      href: `${context.routeBase}/demandes`,
+      href: buildNotificationHref(context, 'demande', row.id),
       occurredAt: occurredAt(row),
       tone: toneFromStatus(row.status || 'pending'),
     })
   }
 
   for (const row of tickets || []) {
+    const isClientUpdate =
+      row.status !== 'open' ||
+      row.updated_at !== row.created_at ||
+      row.response_updated_at ||
+      row.cabinet_reply ||
+      row.attached_document_url
+
+    if (!context.isCabinet && !isClientUpdate) continue
+
     items.push({
       id: `ticket-${row.id}`,
       kind: 'ticket',
@@ -134,7 +162,7 @@ export function buildWorkspaceNotifications(
       status: row.status || 'open',
       companyId: row.company_id,
       companyName: context.isCabinet ? (context.companyLookup[row.company_id] || 'Client') : (user.company_name || 'Votre entreprise'),
-      href: `${context.routeBase}/tickets`,
+      href: buildNotificationHref(context, 'ticket', row.id),
       occurredAt: occurredAt(row),
       tone: toneFromStatus(row.status || 'open'),
     })
@@ -212,6 +240,10 @@ export async function loadWorkspaceNotifications(user: any, pathname: string) {
       }
     }
   } catch {}
+
+  if (!context.isCabinet) {
+    return []
+  }
 
   const [{ data: demandes, error: demandesError }, { data: tickets, error: ticketsError }] = await Promise.all([
     supabase

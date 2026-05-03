@@ -8,6 +8,12 @@ function routeBase(slug: string, shell: string, kind: string) {
   return `/${slug}/${zone}/${kind === 'demande' ? 'demandes' : 'tickets'}`
 }
 
+function notificationHref(slug: string, shell: string, kind: string, entityId?: string | null) {
+  const base = routeBase(slug, shell, kind)
+  if (!entityId) return base
+  return `${base}?selected=${encodeURIComponent(entityId)}`
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -33,6 +39,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ notifications: [] })
     }
 
+    let companyNameLookup: Record<string, string> = {}
+    if (shell === 'cabinet') {
+      const { data: companies } = await admin
+        .from('companies')
+        .select('id,name,slug')
+        .in('id', companyIds)
+
+      companyNameLookup = Object.fromEntries(
+        ((companies as any[]) || []).map((row) => [row.id, row.name || row.slug || 'Client']),
+      )
+    }
+
     const { data, error } = await admin
       .from('workspace_notifications')
       .select('*')
@@ -51,8 +69,8 @@ export async function GET(request: Request) {
         message: row.message,
         status: row.status || '',
         companyId: row.company_id,
-        companyName: shell === 'cabinet' ? 'Client' : 'Votre entreprise',
-        href: routeBase(slug, shell, row.kind),
+        companyName: shell === 'cabinet' ? (companyNameLookup[row.company_id] || 'Client') : 'Votre entreprise',
+        href: notificationHref(slug, shell, row.kind, row.entity_id),
         occurredAt: row.created_at,
         tone: ['ready', 'delivered', 'resolved', 'closed'].includes(row.status) ? 'success' : ['pending', 'open', 'waiting_client'].includes(row.status) ? 'warning' : 'accent',
       })),

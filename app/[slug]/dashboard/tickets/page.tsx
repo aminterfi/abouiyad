@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { loadOperationalScope } from '@/lib/workspace-client'
 import { sendWorkspaceEmailNotification } from '@/lib/workspace-email'
 import { useRealtime } from '@/lib/useRealtime'
@@ -110,6 +110,8 @@ function formatDate(value?: string | null) {
 
 export default function TicketsPage() {
   const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [tickets, setTickets] = useState<any[]>([])
   const [managedCompanies, setManagedCompanies] = useState<any[]>([])
   const [title, setTitle] = useState('')
@@ -183,20 +185,21 @@ export default function TicketsPage() {
     if (!title.trim()) return
     setSaving(true)
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-    const { error: err } = await supabase.from('support_tickets').insert({
+    const { data: createdTicket, error: err } = await supabase.from('support_tickets').insert({
       title: title.trim(),
       description: description.trim() || null,
       priority,
       status: 'open',
       company_id: currentUser.company_id,
       created_by: currentUser.id,
-    })
+    }).select('id').single()
     if (err) setError('Impossible de creer le ticket.')
     else if (mode === 'client') {
       await createWorkspaceNotification({
         audience: 'cabinet',
         kind: 'ticket',
         companyId: currentUser.company_id,
+        entityId: createdTicket?.id || null,
         title: title.trim(),
         message: 'Nouveau ticket client a prendre en charge.',
         status: 'open',
@@ -273,6 +276,12 @@ export default function TicketsPage() {
   const selectedTicket = filtered.find((ticket) => ticket.id === selectedId) || filtered[0] || null
 
   useEffect(() => {
+    const selectedFromQuery = searchParams?.get('selected') || ''
+    if (selectedFromQuery && filtered.some((ticket) => ticket.id === selectedFromQuery)) {
+      setSelectedId(selectedFromQuery)
+      return
+    }
+
     if (!filtered.length) {
       setSelectedId('')
       return
@@ -280,7 +289,7 @@ export default function TicketsPage() {
     if (!selectedId || !filtered.some((ticket) => ticket.id === selectedId)) {
       setSelectedId(filtered[0].id)
     }
-  }, [filtered, selectedId])
+  }, [filtered, selectedId, searchParams])
 
   useEffect(() => {
     setReplyDraft(selectedTicket?.cabinet_reply || '')
@@ -426,7 +435,10 @@ export default function TicketsPage() {
             {filtered.map((ticket: any) => {
               const active = selectedTicket?.id === ticket.id
               return (
-              <article key={ticket.id} style={{ ...item, cursor:'pointer', borderColor: active ? 'var(--ws-accent)' : 'var(--ws-border)', boxShadow: active ? '0 0 0 1px var(--ws-accent)' : 'none' }} onClick={() => setSelectedId(ticket.id)}>
+              <article key={ticket.id} style={{ ...item, cursor:'pointer', borderColor: active ? 'var(--ws-accent)' : 'var(--ws-border)', boxShadow: active ? '0 0 0 1px var(--ws-accent)' : 'none' }} onClick={() => {
+                setSelectedId(ticket.id)
+                router.replace(`${pathname}?selected=${encodeURIComponent(ticket.id)}`, { scroll: false })
+              }}>
                 <div style={itemHead}>
                   <div style={itemMain}>
                     <div style={badges}>
