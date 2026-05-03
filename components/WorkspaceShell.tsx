@@ -135,6 +135,7 @@ export default function WorkspaceShell({
   const notifRef = useRef<HTMLDivElement | null>(null)
   const notifContextRef = useRef<WorkspaceNotificationContext | null>(null)
   const notificationBootedRef = useRef(false)
+  const notificationLoadedRef = useRef(false)
   const audioContextRef = useRef<AudioContext | null>(null)
   const previousTopNotificationRef = useRef<string>('')
   const resolvedShell: ShellKey = shell === 'admin-rs' ? 'cabinet' : shell
@@ -268,7 +269,9 @@ export default function WorkspaceShell({
     }
 
     async function run() {
-      setNotifLoading(true)
+      if (!notificationLoadedRef.current) {
+        setNotifLoading(true)
+      }
       try {
         const [context, items] = await Promise.all([
           loadWorkspaceNotificationContext(user, pathname),
@@ -280,9 +283,11 @@ export default function WorkspaceShell({
         maybePlayFallbackSound(items)
       } catch {
         if (!active) return
-        setNotifications([])
       } finally {
-        if (active) setNotifLoading(false)
+        if (active) {
+          notificationLoadedRef.current = true
+          setNotifLoading(false)
+        }
       }
     }
 
@@ -324,7 +329,10 @@ export default function WorkspaceShell({
       window.addEventListener('pointerdown', handleFirstPointerDown, { once: true })
     })
 
-    const timer = window.setInterval(run, 2000)
+    const timer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') return
+      void run()
+    }, 15000)
 
     return () => {
       active = false
