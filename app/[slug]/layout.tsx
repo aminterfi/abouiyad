@@ -13,6 +13,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     title: `${appName} | RSS`,
     applicationName: appName,
     manifest: `/${slug}/manifest.webmanifest`,
+    appleWebApp: {
+      capable: true,
+      title: appName,
+      statusBarStyle: 'default',
+    },
     icons: {
       icon: [{ url: `/${slug}/icon` }],
       shortcut: [{ url: `/${slug}/icon` }],

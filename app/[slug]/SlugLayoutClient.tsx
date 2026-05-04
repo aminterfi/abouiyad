@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getDefaultWorkspacePath, getLegacyDashboardRedirect, normalizeWorkspaceSession } from '@/lib/workspace'
+import PwaClient from '@/components/PwaClient'
 
 export default function SlugLayoutClient({ slug, children }: { slug: string; children: React.ReactNode }) {
   const router = useRouter()
@@ -103,5 +104,10 @@ export default function SlugLayoutClient({ slug, children }: { slug: string; chi
     )
   }
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <PwaClient slug={slug} />
+    </>
+  )
 }
