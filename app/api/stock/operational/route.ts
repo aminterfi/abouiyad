@@ -473,6 +473,7 @@ async function processPurchaseReceipt(
   const subtotal = roundMoney(
     params.items.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0),
   )
+  const totalQuantity = params.items.reduce((sum, item) => sum + item.quantity, 0)
   const normalizedCosts = params.purchaseType === 'import'
     ? params.extraCosts
       .map((cost) => ({
@@ -487,8 +488,8 @@ async function processPurchaseReceipt(
 
   const withAllocations = params.items.map((item) => {
     const lineBaseTotal = roundMoney(item.quantity * item.unitCost)
-    const extraAllocated = subtotal > 0 && extraCostsTotal > 0
-      ? roundMoney(extraCostsTotal * (lineBaseTotal / subtotal))
+    const extraAllocated = totalQuantity > 0 && extraCostsTotal > 0
+      ? roundMoney(extraCostsTotal * (item.quantity / totalQuantity))
       : 0
     const effectiveUnitCost = item.quantity > 0
       ? roundMoney((lineBaseTotal + extraAllocated) / item.quantity)

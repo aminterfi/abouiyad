@@ -56,7 +56,7 @@ const lbl: React.CSSProperties = {
 
 const SEGMENTS: Array<{ key: PurchaseMode; label: string; note: string }> = [
   { key: 'simple', label: 'Bon d achat simple', note: 'Reception classique. Le prix d achat du lot est celui de la ligne.' },
-  { key: 'import', label: 'Bon d achat importation', note: 'Les autres frais sont repartis sur les lignes selon leur valeur.' },
+  { key: 'import', label: 'Bon d achat importation', note: 'Les autres frais sont repartis sur les lignes au prorata des quantites achetees.' },
 ]
 
 const CURRENCIES = ['DZD', 'EUR', 'USD', 'CNY', 'GBP']
@@ -136,6 +136,7 @@ export default function StockAchatsPage() {
     })
 
     const subtotal = roundMoney(parsed.reduce((sum, line) => sum + line.baseTotal, 0))
+    const totalQuantity = parsed.reduce((sum, line) => sum + line.quantity, 0)
     const normalizedCosts = mode === 'import'
       ? extraCosts
         .map((cost) => ({
@@ -146,7 +147,9 @@ export default function StockAchatsPage() {
       : []
     const extra = roundMoney(normalizedCosts.reduce((sum, cost) => sum + cost.amount, 0))
     const preview = parsed.map((line) => {
-      const extraAllocated = subtotal > 0 && extra > 0 ? roundMoney(extra * (line.baseTotal / subtotal)) : 0
+      const extraAllocated = totalQuantity > 0 && extra > 0
+        ? roundMoney(extra * (line.quantity / totalQuantity))
+        : 0
       const effectiveUnitCost = line.quantity > 0
         ? roundMoney((line.baseTotal + extraAllocated) / line.quantity)
         : roundMoney(line.unitCost)
@@ -378,7 +381,16 @@ export default function StockAchatsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
             <thead>
               <tr style={{ background: '#f0eeea' }}>
-                {['Produit', 'Quantite', `Prix achat saisi (${currency})`, 'Code lot', 'Notes', mode === 'import' ? 'Frais repartis' : 'Total ligne', 'Prix achat final', ''].map((header) => (
+                {[
+                  'Produit',
+                  'Quantite',
+                  mode === 'import' ? `Prix achat final (${currency})` : `Prix achat (${currency})`,
+                  'Code lot',
+                  'Notes',
+                  mode === 'import' ? 'Frais repartis' : 'Total ligne',
+                  mode === 'import' ? 'Detail prix' : 'Valeur finale',
+                  '',
+                ].map((header) => (
                   <th key={header} style={{ fontSize: 11, fontWeight: 600, color: '#a8a69e', textTransform: 'uppercase', padding: '10px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}>{header}</th>
                 ))}
               </tr>
@@ -403,7 +415,7 @@ export default function StockAchatsPage() {
                       <input type="number" min="0" step="0.01" value={line.unitCost} onChange={(e) => updateLine(index, { unitCost: e.target.value })} style={{ ...inp, background: '#fff' }} />
                       <div style={{ fontSize: 10, color: '#6b6860', marginTop: 4 }}>
                         {mode === 'import'
-                          ? `Base: ${formatMoney(preview?.unitCost || 0, currency)} | Ligne: ${formatMoney(preview?.baseTotal || 0, currency)}`
+                          ? `Base: ${formatMoney(preview?.unitCost || 0, currency)}`
                           : `Total ligne: ${formatMoney(preview?.baseTotal || 0, currency)}`}
                       </div>
                     </td>
@@ -506,7 +518,7 @@ export default function StockAchatsPage() {
               <strong style={{ color: '#16a34a' }}>{formatMoney(linePreview.grandTotal, currency)}</strong>
             </div>
             <div style={{ fontSize: 11, color: '#6b6860', lineHeight: 1.6 }}>
-              En importation, les autres frais sont repartis au prorata de la valeur des lignes. Le cout final des lots alimente directement votre methode FIFO, CUMP ou LIFO.
+              En importation, les autres frais sont repartis au prorata des quantites achetees. Le cout final des lots alimente directement votre methode FIFO, CUMP ou LIFO.
             </div>
             <button onClick={submit} disabled={saving} style={{ marginTop: 6, padding: '11px 14px', borderRadius: 7, border: 'none', background: saving ? '#a8a69e' : '#2563EB', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
               {saving ? 'Enregistrement...' : 'Enregistrer le bon d achat'}
