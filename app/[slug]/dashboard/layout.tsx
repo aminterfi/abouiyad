@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { buildWorkspaceSessionForCompany, detectWorkspaceType, writeWorkspaceSession } from '@/lib/workspace'
 
 function CompanySwitcher({ slug, companyName, settings, collapsed }: any) {
   const [open, setOpen] = useState(false)
@@ -27,9 +28,9 @@ function CompanySwitcher({ slug, companyName, settings, collapsed }: any) {
 
   function switchCompany(c: any) {
     const u = JSON.parse(localStorage.getItem('user') || '{}')
-    const updated = { ...u, company_id: c.company_id, company_name: c.company_name, slug: c.slug }
-    localStorage.setItem('user', JSON.stringify(updated))
-    window.location.href = `/${c.slug}/dashboard`
+    const updated = buildWorkspaceSessionForCompany(u, c)
+    writeWorkspaceSession(updated)
+    window.location.href = `/${c.slug}/${detectWorkspaceType(c) === 'cabinet' ? 'cabinet' : 'client'}`
   }
 
   const hasMultiple = companies.length > 1

@@ -23,6 +23,8 @@ export default function SlugHomePage() {
   const [error, setError] = useState('')
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetMessage, setResetMessage] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
@@ -87,6 +89,33 @@ export default function SlugHomePage() {
       setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : err.message)
     }
     setLoading(false)
+  }
+
+  async function sendOwnerReset() {
+    setError('')
+    setResetMessage('')
+
+    const email = ownerEmail.trim().toLowerCase()
+    if (!email) {
+      setError('Entrez votre email proprietaire pour recevoir le lien.')
+      return
+    }
+
+    setResetLoading(true)
+    try {
+      const response = await fetch('/api/auth/owner-reset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, slug }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result?.error || 'Reinitialisation impossible.')
+      setResetMessage('Si ce proprietaire existe pour cette entreprise, un email de reinitialisation a ete envoye.')
+    } catch (err: any) {
+      setError(err?.message || 'Reinitialisation impossible.')
+    } finally {
+      setResetLoading(false)
+    }
   }
 
   async function loginEmployee(e: React.FormEvent) {
@@ -246,6 +275,7 @@ export default function SlugHomePage() {
           </div>
 
           {error && <div style={{background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.2)',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#dc2626',marginBottom:14}}>{error}</div>}
+          {resetMessage && <div style={{background:'rgba(22,163,74,0.08)',border:'1px solid rgba(22,163,74,0.2)',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#15803d',marginBottom:14}}>{resetMessage}</div>}
 
           {mode==='employee' ? (
             <form onSubmit={loginEmployee}>
@@ -268,6 +298,12 @@ export default function SlugHomePage() {
               <label style={{fontSize:12,color:'#6b6860',marginBottom:6,display:'block'}}>Mot de passe</label>
               <input type="password" required value={ownerPassword} onChange={e=>setOwnerPassword(e.target.value)} placeholder="••••••••"
                 style={{width:'100%',padding:'11px 14px',fontSize:14,border:'1px solid rgba(0,0,0,0.14)',borderRadius:8,background:'#f8f7f5',marginBottom:18,outline:'none',fontFamily:'inherit'}}/>
+              <div style={{display:'flex',justifyContent:'flex-end',marginTop:-8,marginBottom:14}}>
+                <button type="button" onClick={sendOwnerReset} disabled={resetLoading}
+                  style={{background:'transparent',border:'none',padding:0,cursor:resetLoading?'not-allowed':'pointer',fontFamily:'inherit',fontSize:12,color:c,fontWeight:600}}>
+                  {resetLoading?'Envoi...':'Mot de passe oublie ?'}
+                </button>
+              </div>
               <button type="submit" disabled={loading}
                 style={{width:'100%',padding:14,fontSize:14,fontWeight:600,background:loading?'#a8a69e':`linear-gradient(135deg,${c},${c}dd)`,color:'#fff',border:'none',borderRadius:8,cursor:loading?'not-allowed':'pointer',fontFamily:'inherit',boxShadow:`0 4px 14px ${c}40`}}>
                 {loading?'Connexion...':'Se connecter'}

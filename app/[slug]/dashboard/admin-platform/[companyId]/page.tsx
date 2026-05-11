@@ -146,7 +146,7 @@ export default function CompanyDetailPage() {
     if(!confirm(`Envoyer un email de réinitialisation à ${data.owner.email} ?`)) return
     setSaving(true)
     const { error } = await supabase.auth.resetPasswordForEmail(data.owner.email, {
-      redirectTo: `${window.location.origin}/`
+      redirectTo: `${window.location.origin}/reset-password?slug=${encodeURIComponent(data.company.slug || slug)}`
     })
     if(error){flash(error.message,true);setSaving(false);return}
     flash(`✅ Email envoyé à ${data.owner.email}`)
@@ -209,20 +209,28 @@ export default function CompanyDetailPage() {
 
   const sub = data.subscription
   const stats = data.stats || {}
-  const inp:React.CSSProperties = {width:'100%',padding:'9px 12px',fontSize:13,border:'1px solid rgba(0,0,0,0.14)',borderRadius:6,fontFamily:'inherit',outline:'none'}
-  const lbl:React.CSSProperties = {fontSize:11,color:'#6b6860',marginBottom:5,fontWeight:500,display:'block'}
-  const card:React.CSSProperties = {background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:20,marginBottom:14}
-  const sectionTitle:React.CSSProperties = {fontSize:11,fontWeight:700,color:'#a8a69e',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:14,display:'flex',alignItems:'center',gap:8}
+  const text = 'var(--ws-text)'
+  const muted = 'var(--ws-muted)'
+  const faint = 'var(--ws-faint)'
+  const panel = 'var(--ws-panel)'
+  const panel2 = 'var(--ws-panel-2)'
+  const panel3 = 'var(--ws-panel-3)'
+  const border = 'var(--ws-border)'
+  const accent = 'var(--ws-accent)'
+  const inp:React.CSSProperties = {width:'100%',padding:'10px 12px',fontSize:13,border:`1px solid ${border}`,borderRadius:8,fontFamily:'inherit',outline:'none',background:panel2,color:text}
+  const lbl:React.CSSProperties = {fontSize:11,color:muted,marginBottom:6,fontWeight:700,display:'block'}
+  const card:React.CSSProperties = {background:panel,border:`1px solid ${border}`,borderRadius:12,padding:20,marginBottom:14,color:text}
+  const sectionTitle:React.CSSProperties = {fontSize:11,fontWeight:800,color:faint,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:14,display:'flex',alignItems:'center',gap:8}
   const moduleOptions = ['dashboard','billing','clients','payments','catalog','stock','tickets','service_requests','documents','users','settings']
 
   return (
-    <div>
+    <div style={{color:text}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18,flexWrap:'wrap',gap:10}}>
         <div>
           <button onClick={()=>router.push(`/${slug}/dashboard/admin-platform`)}
-            style={{fontSize:12,color:'#6b6860',background:'transparent',border:'none',cursor:'pointer',marginBottom:6,padding:0,fontFamily:'inherit'}}>← Retour à la liste</button>
-          <div style={{fontSize:20,fontWeight:700,color:'#1a1916'}}>{data.company.name}</div>
-          <div style={{fontSize:12,color:'#a8a69e',fontFamily:'JetBrains Mono,monospace',marginTop:2}}>/{data.company.slug} · ID: {data.company.id?.slice(0,8)}</div>
+            style={{fontSize:12,color:muted,background:'transparent',border:'none',cursor:'pointer',marginBottom:6,padding:0,fontFamily:'inherit'}}>← Retour à la liste</button>
+          <div style={{fontSize:20,fontWeight:700,color:text}}>{data.company.name}</div>
+          <div style={{fontSize:12,color:faint,fontFamily:'JetBrains Mono,monospace',marginTop:2}}>/{data.company.slug} · ID: {data.company.id?.slice(0,8)}</div>
         </div>
       </div>
 
@@ -244,7 +252,7 @@ export default function CompanyDetailPage() {
           ].map((s:any,i)=>(
             <div key={i} style={{textAlign:'center'}}>
               <div style={{fontSize:18,fontWeight:700,color:s.c,fontFamily:s.mono?'JetBrains Mono,monospace':'inherit'}}>{s.v}</div>
-              <div style={{fontSize:10,color:'#a8a69e',marginTop:3}}>{s.l}</div>
+              <div style={{fontSize:10,color:faint,marginTop:3}}>{s.l}</div>
             </div>
           ))}
         </div>
@@ -252,19 +260,19 @@ export default function CompanyDetailPage() {
 
       <div style={card}>
         <div style={sectionTitle}>Workflow commercial</div>
-        <div style={{fontSize:12,color:'#6b6860',marginBottom:16,lineHeight:1.6}}>
+        <div style={{fontSize:12,color:muted,marginBottom:16,lineHeight:1.6}}>
           Le client classe ses pièces entre déclaré et non déclaré. Le cabinet suit ensuite le flux recommandé:
-          <strong style={{color:'#1a1916'}}> Devis → Bon de commande → Bon de livraison → Facture</strong>.
+          <strong style={{color:text}}> Devis → Bon de commande → Bon de livraison → Facture</strong>.
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:18}}>
           {[
-            { label:'Documents', value:commercial?.summary?.total || 0, color:'#1a1916' },
+            { label:'Documents', value:commercial?.summary?.total || 0, color:text },
             { label:'Déclarés', value:commercial?.summary?.declared || 0, color:'#15803d' },
             { label:'À vérifier', value:commercial?.summary?.pendingDeclaration || 0, color:'#d97706' },
             { label:'Montant total', value:dzd(commercial?.summary?.totalAmount || 0), color:'#2563EB', mono:true },
           ].map((item:any) => (
-            <div key={item.label} style={{padding:'14px 16px',border:'1px solid rgba(0,0,0,0.08)',borderRadius:10,background:'#fafaf8'}}>
-              <div style={{fontSize:11,color:'#a8a69e',textTransform:'uppercase',marginBottom:6}}>{item.label}</div>
+            <div key={item.label} style={{padding:'14px 16px',border:`1px solid ${border}`,borderRadius:10,background:panel2}}>
+              <div style={{fontSize:11,color:faint,textTransform:'uppercase',marginBottom:6}}>{item.label}</div>
               <div style={{fontSize:18,fontWeight:700,color:item.color,fontFamily:item.mono?'JetBrains Mono,monospace':'inherit'}}>{item.value}</div>
             </div>
           ))}
@@ -275,7 +283,7 @@ export default function CompanyDetailPage() {
             return (
               <div key={type} style={{padding:'12px 14px',borderRadius:10,border:`1px solid ${meta.accent}22`,background:meta.light}}>
                 <div style={{fontSize:10,fontWeight:800,color:meta.accent,textTransform:'uppercase'}}>{meta.shortLabel}</div>
-                <div style={{fontSize:13,fontWeight:700,color:'#1a1916',marginTop:6}}>{meta.label}</div>
+                <div style={{fontSize:13,fontWeight:700,color:text,marginTop:6}}>{meta.label}</div>
                 <div style={{fontSize:18,fontWeight:800,color:meta.accent,marginTop:8}}>
                   {commercial?.summary?.byType?.[type] || 0}
                 </div>
@@ -283,10 +291,10 @@ export default function CompanyDetailPage() {
             )
           })}
         </div>
-        <div style={{fontSize:12,fontWeight:700,color:'#1a1916',marginBottom:10}}>Derniers documents à traiter</div>
+        <div style={{fontSize:12,fontWeight:700,color:text,marginBottom:10}}>Derniers documents à traiter</div>
         <div style={{display:'grid',gap:10}}>
           {(commercial?.rows || []).length === 0 ? (
-            <div style={{padding:'16px 18px',border:'1px dashed rgba(0,0,0,0.16)',borderRadius:10,fontSize:13,color:'#6b6860'}}>
+            <div style={{padding:'16px 18px',border:`1px dashed ${border}`,borderRadius:10,fontSize:13,color:muted,background:panel2}}>
               Aucun document commercial pour cette entreprise pour le moment.
             </div>
           ) : (
@@ -294,14 +302,14 @@ export default function CompanyDetailPage() {
               const meta = getCommercialDocumentMeta(row.document_type)
               const declaration = getDeclarationMeta(row.client_declared)
               return (
-                <div key={row.id} style={{display:'grid',gridTemplateColumns:'1.2fr .8fr .8fr .9fr',gap:12,alignItems:'center',padding:'14px 16px',border:'1px solid rgba(0,0,0,0.08)',borderRadius:10,background:'#fff'}}>
+                <div key={row.id} style={{display:'grid',gridTemplateColumns:'1.2fr .8fr .8fr .9fr',gap:12,alignItems:'center',padding:'14px 16px',border:`1px solid ${border}`,borderRadius:10,background:panel2}}>
                   <div>
-                    <div style={{fontSize:12,fontWeight:700,color:'#1a1916'}}>{row.invoice_number}</div>
-                    <div style={{fontSize:11,color:'#6b6860',marginTop:4}}>
+                    <div style={{fontSize:12,fontWeight:700,color:text}}>{row.invoice_number}</div>
+                    <div style={{fontSize:11,color:muted,marginTop:4}}>
                       {row.clients?.full_name || 'Client'} · {new Date(row.created_at).toLocaleDateString('fr-DZ')}
                     </div>
                     {row.client_declaration_note ? (
-                      <div style={{fontSize:11,color:'#6b6860',marginTop:6,lineHeight:1.5}}>{row.client_declaration_note}</div>
+                      <div style={{fontSize:11,color:muted,marginTop:6,lineHeight:1.5}}>{row.client_declaration_note}</div>
                     ) : null}
                   </div>
                   <div>
@@ -315,8 +323,8 @@ export default function CompanyDetailPage() {
                     </div>
                   </div>
                   <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:13,fontWeight:700,color:'#1a1916',fontFamily:'JetBrains Mono,monospace'}}>{dzd(row.total_amount || 0)}</div>
-                    <div style={{fontSize:11,color:'#6b6860',marginTop:4}}>
+                    <div style={{fontSize:13,fontWeight:700,color:text,fontFamily:'JetBrains Mono,monospace'}}>{dzd(row.total_amount || 0)}</div>
+                    <div style={{fontSize:11,color:muted,marginTop:4}}>
                       Solde {dzd((row.balance ?? 0))}
                     </div>
                   </div>
@@ -349,14 +357,14 @@ export default function CompanyDetailPage() {
           <div>
             <label style={lbl}>Couleur primaire</label>
             <div style={{display:'flex',gap:6}}>
-              <input type="color" style={{width:46,height:36,border:'1px solid rgba(0,0,0,0.14)',borderRadius:6,cursor:'pointer'}}
+              <input type="color" style={{width:46,height:40,border:`1px solid ${border}`,borderRadius:8,cursor:'pointer',background:panel2}}
                 value={companyForm.primary_color} onChange={e=>setCompanyForm({...companyForm,primary_color:e.target.value})}/>
               <input style={{...inp,fontFamily:'JetBrains Mono,monospace'}} value={companyForm.primary_color} onChange={e=>setCompanyForm({...companyForm,primary_color:e.target.value})}/>
             </div>
           </div>
         </div>
         <button onClick={saveCompany} disabled={saving}
-          style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#2563EB',color:'#fff',border:'none',borderRadius:6,cursor:saving?'not-allowed':'pointer',fontFamily:'inherit'}}>
+          style={{padding:'10px 18px',fontSize:13,fontWeight:700,background:accent,color:'#fff',border:'none',borderRadius:8,cursor:saving?'not-allowed':'pointer',fontFamily:'inherit'}}>
           {saving?'Enregistrement...':'💾 Enregistrer'}
         </button>
       </div>
@@ -377,11 +385,11 @@ export default function CompanyDetailPage() {
         </div>
         <div style={{display:'flex',gap:8}}>
           <button onClick={saveOwner} disabled={saving}
-            style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#2563EB',color:'#fff',border:'none',borderRadius:6,cursor:saving?'not-allowed':'pointer',fontFamily:'inherit'}}>
+            style={{padding:'10px 18px',fontSize:13,fontWeight:700,background:accent,color:'#fff',border:'none',borderRadius:8,cursor:saving?'not-allowed':'pointer',fontFamily:'inherit'}}>
             💾 Enregistrer
           </button>
           <button onClick={resetPassword} disabled={saving}
-            style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#fff',color:'#d97706',border:'1px solid rgba(217,119,6,0.3)',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
+            style={{padding:'10px 18px',fontSize:13,fontWeight:700,background:'transparent',color:'#d97706',border:'1px solid rgba(217,119,6,0.35)',borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>
             🔑 Reset password
           </button>
         </div>
@@ -413,7 +421,7 @@ export default function CompanyDetailPage() {
           </div>
         </div>
         <button onClick={saveWorkspace} disabled={saving}
-          style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#1a1916',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{padding:'10px 18px',fontSize:13,fontWeight:700,background:panel3,color:text,border:`1px solid ${border}`,borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>
           Enregistrer la structure
         </button>
       </div>
@@ -424,7 +432,7 @@ export default function CompanyDetailPage() {
           {moduleOptions.map((moduleKey) => {
             const active = modules.includes(moduleKey)
             return (
-              <label key={moduleKey} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer',padding:'10px 12px',border:'1px solid rgba(0,0,0,0.08)',borderRadius:8,background:active?'rgba(37,99,235,0.06)':'#fff'}}>
+              <label key={moduleKey} style={{display:'flex',alignItems:'center',gap:10,fontSize:12,cursor:'pointer',padding:'11px 12px',border:`1px solid ${active ? 'rgba(96,165,250,0.32)' : border}`,borderRadius:8,background:active?'rgba(96,165,250,0.12)':panel2,color:text}}>
                 <input
                   type="checkbox"
                   checked={active}
@@ -433,13 +441,13 @@ export default function CompanyDetailPage() {
                     else setModules((prev) => prev.filter((item) => item !== moduleKey))
                   }}
                 />
-                <span>{moduleKey}</span>
+                <span style={{fontWeight:700,color:text}}>{moduleKey}</span>
               </label>
             )
           })}
         </div>
         <button onClick={saveModules} disabled={saving}
-          style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#2563EB',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{padding:'10px 18px',fontSize:13,fontWeight:700,background:accent,color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>
           Enregistrer les modules
         </button>
       </div>
@@ -448,14 +456,14 @@ export default function CompanyDetailPage() {
       <div style={card}>
         <div style={sectionTitle}>💳 Abonnement</div>
         {sub ? (
-          <div style={{marginBottom:18,padding:14,background:'#f8f7f5',borderRadius:8}}>
-            <div style={{fontSize:12,color:'#6b6860'}}>Statut actuel</div>
+          <div style={{marginBottom:18,padding:14,background:panel2,border:`1px solid ${border}`,borderRadius:8}}>
+            <div style={{fontSize:12,color:muted}}>Statut actuel</div>
             <div style={{fontSize:18,fontWeight:700,marginTop:4,color:sub.status==='active'?'#16a34a':sub.status==='trial'?'#d97706':'#dc2626'}}>
               {sub.status?.toUpperCase()} · {sub.plan || '—'}
             </div>
-            {sub.trial_end && <div style={{fontSize:11,color:'#6b6860',marginTop:6}}>Trial jusqu'au {new Date(sub.trial_end).toLocaleDateString('fr-DZ')}</div>}
+            {sub.trial_end && <div style={{fontSize:11,color:muted,marginTop:6}}>Trial jusqu'au {new Date(sub.trial_end).toLocaleDateString('fr-DZ')}</div>}
             {sub.end_date && <div style={{fontSize:11,color:'#6b6860',marginTop:2}}>Échéance : {new Date(sub.end_date).toLocaleDateString('fr-DZ')}</div>}
-            {sub.price_monthly > 0 && <div style={{fontSize:11,color:'#6b6860',marginTop:2}}>Prix : {dzd(sub.price_monthly)}/mois</div>}
+            {sub.price_monthly > 0 && <div style={{fontSize:11,color:muted,marginTop:2}}>Prix : {dzd(sub.price_monthly)}/mois</div>}
           </div>
         ) : (
           <div style={{padding:14,background:'#fff7ed',border:'1px solid #fb923c',borderRadius:8,marginBottom:14,fontSize:13,color:'#c2410c'}}>
@@ -463,7 +471,7 @@ export default function CompanyDetailPage() {
           </div>
         )}
 
-        <div style={{borderTop:'1px solid rgba(0,0,0,0.05)',paddingTop:14,marginBottom:14}}>
+        <div style={{borderTop:`1px solid ${border}`,paddingTop:14,marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Prolonger le trial</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <select value={extendDays} onChange={e=>setExtendDays(parseInt(e.target.value))}
@@ -482,7 +490,7 @@ export default function CompanyDetailPage() {
           </div>
         </div>
 
-        <div style={{borderTop:'1px solid rgba(0,0,0,0.05)',paddingTop:14,marginBottom:14}}>
+        <div style={{borderTop:`1px solid ${border}`,paddingTop:14,marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Activer un abonnement payant</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:8,alignItems:'flex-end'}}>
             <div>
@@ -509,7 +517,7 @@ export default function CompanyDetailPage() {
           </div>
         </div>
 
-        <div style={{borderTop:'1px solid rgba(0,0,0,0.05)',paddingTop:14,display:'flex',gap:8}}>
+        <div style={{borderTop:`1px solid ${border}`,paddingTop:14,display:'flex',gap:8}}>
           {sub?.status === 'suspended' ? (
             <button onClick={reactivate} disabled={saving}
               style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#16a34a',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
@@ -517,7 +525,7 @@ export default function CompanyDetailPage() {
             </button>
           ) : (
             <button onClick={suspend} disabled={saving}
-              style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'#fff',color:'#dc2626',border:'1px solid rgba(220,38,38,0.3)',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
+              style={{padding:'9px 18px',fontSize:13,fontWeight:600,background:'transparent',color:'#dc2626',border:'1px solid rgba(220,38,38,0.35)',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
               ⏸ Suspendre
             </button>
           )}

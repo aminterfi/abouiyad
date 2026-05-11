@@ -6,6 +6,7 @@ export type WorkspaceSession = {
   id?: string
   email?: string | null
   full_name?: string | null
+  phone?: string | null
   role?: string | null
   type?: string | null
   slug?: string | null
@@ -19,6 +20,20 @@ export type WorkspaceSession = {
   active_company_id: string | null
   active_slug: string | null
 }
+
+export const DEFAULT_CLIENT_MODULES = [
+  'dashboard',
+  'billing',
+  'clients',
+  'payments',
+  'catalog',
+  'stock',
+  'tickets',
+  'service_requests',
+  'documents',
+  'users',
+  'settings',
+] as const
 
 export function isManagementSlug(slug: string | null | undefined): boolean {
   return String(slug || '').trim().toLowerCase() === MANAGEMENT_SLUG
@@ -70,6 +85,24 @@ export function normalizeWorkspaceSession(raw: any, fallbackType: WorkspaceType 
     slug: activeSlug,
     is_platform_admin: raw?.is_platform_admin === true,
   }
+}
+
+export function getActiveCompanyId(session: Partial<WorkspaceSession> | any): string {
+  return String(session?.active_company_id || session?.company_id || '')
+}
+
+export function buildWorkspaceSessionForCompany(currentSession: any, company: any): WorkspaceSession {
+  return normalizeWorkspaceSession({
+    ...currentSession,
+    company_id: company.company_id || company.id,
+    company_name: company.company_name || company.name,
+    slug: company.slug,
+    workspace_type: detectWorkspaceType(company),
+    workspace_role: company.workspace_role || company.role || currentSession?.workspace_role || currentSession?.role || 'owner',
+    parent_cabinet_id: company.parent_cabinet_id || null,
+    active_company_id: company.company_id || company.id,
+    active_slug: company.slug,
+  })
 }
 
 export function getShellRoot(slug: string, shell: ShellKey): string {

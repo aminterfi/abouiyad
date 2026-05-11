@@ -209,22 +209,31 @@ export default function DemandesPage() {
     if (!title.trim()) return
     setSaving(true)
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-    const { data: createdRow, error: err } = await supabase.from('service_requests').insert({
-      request_type: requestType,
-      title: title.trim(),
-      details: details.trim() || null,
-      status: 'pending',
-      requires_generated_document: requestType === 'g12' || requestType === 'auto_document',
-      company_id: currentUser.company_id,
-      created_by: currentUser.id,
-    }).select('id').single()
-    if (err) {
-      setError('Impossible de creer la demande.')
-    } else if (mode === 'client') {
+    const companyId = currentUser.company_id || currentUser.active_company_id
+    const response = await fetch('/api/workspace/operational', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'demande',
+        companyId,
+        createdBy: currentUser.id,
+        creatorEmail: currentUser.email,
+        requestType,
+        title: title.trim(),
+        details: details.trim() || null,
+      }),
+    })
+    const createdRow = await response.json()
+    if (!response.ok) {
+      setError(createdRow?.error || 'Impossible de creer la demande.')
+      setSaving(false)
+      return
+    }
+    if (mode === 'client') {
       await createWorkspaceNotification({
         audience: 'cabinet',
         kind: 'demande',
-        companyId: currentUser.company_id,
+        companyId,
         entityId: createdRow?.id || null,
         title: title.trim(),
         message: 'Nouvelle demande client a traiter.',
@@ -234,7 +243,7 @@ export default function DemandesPage() {
         scope: 'cabinet',
         kind: 'demande',
         action: 'created',
-        companyId: currentUser.company_id,
+        companyId,
         title: title.trim(),
         status: 'pending',
         actorName: currentUser.full_name || currentUser.email || null,

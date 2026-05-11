@@ -185,20 +185,31 @@ export default function TicketsPage() {
     if (!title.trim()) return
     setSaving(true)
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
-    const { data: createdTicket, error: err } = await supabase.from('support_tickets').insert({
-      title: title.trim(),
-      description: description.trim() || null,
-      priority,
-      status: 'open',
-      company_id: currentUser.company_id,
-      created_by: currentUser.id,
-    }).select('id').single()
-    if (err) setError('Impossible de creer le ticket.')
-    else if (mode === 'client') {
+    const companyId = currentUser.company_id || currentUser.active_company_id
+    const response = await fetch('/api/workspace/operational', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'ticket',
+        companyId,
+        createdBy: currentUser.id,
+        creatorEmail: currentUser.email,
+        title: title.trim(),
+        description: description.trim() || null,
+        priority,
+      }),
+    })
+    const createdTicket = await response.json()
+    if (!response.ok) {
+      setError(createdTicket?.error || 'Impossible de creer le ticket.')
+      setSaving(false)
+      return
+    }
+    if (mode === 'client') {
       await createWorkspaceNotification({
         audience: 'cabinet',
         kind: 'ticket',
-        companyId: currentUser.company_id,
+        companyId,
         entityId: createdTicket?.id || null,
         title: title.trim(),
         message: 'Nouveau ticket client a prendre en charge.',
@@ -208,7 +219,7 @@ export default function TicketsPage() {
         scope: 'cabinet',
         kind: 'ticket',
         action: 'created',
-        companyId: currentUser.company_id,
+        companyId,
         title: title.trim(),
         status: 'open',
         actorName: currentUser.full_name || currentUser.email || null,

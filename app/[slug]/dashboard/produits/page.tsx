@@ -144,17 +144,24 @@ export default function ProduitsPage() {
         
         // Si stock initial, créer un mouvement d'entrée
         if (form.is_stockable && form.track_stock && parseFloat(form.stock_quantity) > 0) {
-          await supabase.from('stock_movements').insert({
-            company_id: user.company_id,
-            product_id: productId,
-            movement_type: 'entry',
-            quantity: parseFloat(form.stock_quantity),
-            unit_cost: parseFloat(form.cost_price) || 0,
-            reference_type: 'manual',
-            notes: 'Stock initial à la création',
-            created_by: user.id,
-            created_by_name: user.full_name,
+          const response = await fetch('/api/stock/operational', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              kind: 'manual_movement',
+              companyId: user.company_id,
+              createdBy: user.id,
+              creatorEmail: user.email,
+              productId,
+              movementType: 'entry',
+              quantity: parseFloat(form.stock_quantity),
+              unitCost: parseFloat(form.cost_price) || 0,
+              lotCode: `INIT-${new Date().toISOString().slice(0, 10)}`,
+              notes: 'Stock initial a la creation',
+            }),
           })
+          const result = await response.json()
+          if (!response.ok) throw new Error(result?.error || 'Impossible de creer le stock initial')
         }
       }
       

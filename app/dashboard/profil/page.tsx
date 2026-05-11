@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { normalizeWorkspaceSession, writeWorkspaceSession } from '@/lib/workspace'
 
 function dzd(v: number) { return (v||0).toLocaleString('fr-DZ')+' DZD' }
 
@@ -19,10 +20,10 @@ export default function ProfilPage() {
   useEffect(() => {
     const u = localStorage.getItem('user')
     if (u) {
-      const parsed = JSON.parse(u)
+      const parsed = normalizeWorkspaceSession(JSON.parse(u))
       setUser(parsed)
       setForm({ full_name:parsed.full_name||'', email:parsed.email||'', phone:parsed.phone||'' })
-      fetchStats(parsed.id)
+      if (parsed.id) fetchStats(parsed.id)
     }
   }, [])
 
@@ -40,8 +41,8 @@ export default function ProfilPage() {
   async function save() {
     setSaving(true)
     await supabase.from('users').update(form).eq('id', user.id)
-    const updated = { ...user, ...form }
-    localStorage.setItem('user', JSON.stringify(updated))
+    const updated = normalizeWorkspaceSession({ ...user, ...form })
+    writeWorkspaceSession(updated)
     setUser(updated)
     setSaving(false)
     setSaved(true)

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { normalizeStockMethod, STOCK_METHODS } from '@/lib/stock-method'
 
 const inp: React.CSSProperties = { width:'100%', background:'#f0eeea', border:'1px solid rgba(0,0,0,0.14)', borderRadius:6, padding:'9px 12px', fontSize:13, color:'#1a1916', fontFamily:'inherit', outline:'none' }
 const lbl: React.CSSProperties = { display:'block', fontSize:12, fontWeight:500, color:'#6b6860', marginBottom:5 }
@@ -65,6 +66,7 @@ export default function ParametresPage() {
         font_family: 'Outfit',
         font_size_base: 14,
         font_size_pdf: 12,
+        inventory_method: 'fifo',
       }).select().single()
       if (created) setSettings({ ...created, slug: comp?.slug || '' })
     }
@@ -89,6 +91,7 @@ export default function ParametresPage() {
       font_family: settings.font_family,
       font_size_base: settings.font_size_base,
       font_size_pdf: settings.font_size_pdf,
+      inventory_method: normalizeStockMethod(settings.inventory_method),
       updated_at: new Date().toISOString(),
     }
     const { error } = await supabase.from('settings').update(payload).eq('company_id', user.company_id)
@@ -139,6 +142,7 @@ export default function ParametresPage() {
     { id:'branding', label:'Logo & Apparence', icon:'🎨' },
     { id:'typographie', label:'Typographie', icon:'🔤' },
     { id:'facturation', label:'Facturation', icon:'💼' },
+    { id:'stock', label:'Stock', icon:'📦' },
     { id:'systeme', label:'Système', icon:'⚙️' },
   ]
 
@@ -314,6 +318,35 @@ export default function ParametresPage() {
                   <label style={lbl}>Pied de page factures</label>
                   <textarea style={{...inp,minHeight:80}} value={settings.footer_text||''} onChange={e=>setSettings({...settings,footer_text:e.target.value})}/>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'stock' && (
+            <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:10,padding:24}}>
+              <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>Politique de stock</div>
+              <div style={{fontSize:12,color:'#a8a69e',marginBottom:20}}>Choisissez la methode avant de commencer les mouvements et les inventaires.</div>
+
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+                {Object.entries(STOCK_METHODS).map(([key, meta]) => {
+                  const active = normalizeStockMethod(settings.inventory_method) === key
+                  return (
+                    <button key={key} onClick={()=>setSettings({...settings, inventory_method:key})}
+                      style={{padding:16,borderRadius:10,border:`2px solid ${active?'#2563EB':'rgba(0,0,0,0.1)'}`,background:active?'rgba(37,99,235,0.06)':'#fff',cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
+                      <div style={{fontSize:11,fontWeight:800,color:active?'#2563EB':'#6b6860',textTransform:'uppercase',letterSpacing:'.5px'}}>{meta.shortLabel}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:'#1a1916',marginTop:8}}>{meta.label}</div>
+                      <div style={{fontSize:12,color:'#6b6860',marginTop:8,lineHeight:1.6}}>{meta.description}</div>
+                      <div style={{fontSize:11,color:key==='lifo'?'#d97706':'#a8a69e',marginTop:10,lineHeight:1.5}}>{meta.accountingNote}</div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div style={{marginTop:18,padding:'14px 16px',background:'rgba(37,99,235,0.04)',border:'1px solid rgba(37,99,235,0.12)',borderRadius:10,fontSize:12,color:'#6b6860',lineHeight:1.7}}>
+                Chaque arrivage cree un lot.
+                <br />FIFO : les sorties consomment les lots les plus anciens.
+                <br />CUMP : les lots restent traces, mais chaque arrivage recalcule le cout moyen.
+                <br />LIFO : les sorties consomment d abord les lots les plus recents.
               </div>
             </div>
           )}

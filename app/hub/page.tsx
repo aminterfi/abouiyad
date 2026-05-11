@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { detectWorkspaceType, getDefaultWorkspacePath, normalizeWorkspaceSession, writeWorkspaceSession } from '@/lib/workspace'
+import { buildWorkspaceSessionForCompany, getDefaultWorkspacePath, normalizeWorkspaceSession, writeWorkspaceSession } from '@/lib/workspace'
 
 export default function HubPage() {
   const router = useRouter()
@@ -39,17 +39,7 @@ export default function HubPage() {
   }
 
   function enterCompany(c: any) {
-    // Mettre à jour le user dans localStorage avec la nouvelle entreprise sélectionnée
-    const updatedUser = normalizeWorkspaceSession({
-      ...user,
-      company_id: c.company_id,
-      company_name: c.company_name,
-      slug: c.slug,
-      workspace_type: detectWorkspaceType(c),
-      parent_cabinet_id: c.parent_cabinet_id || null,
-      active_company_id: c.company_id,
-      active_slug: c.slug,
-    })
+    const updatedUser = buildWorkspaceSessionForCompany(user, c)
     writeWorkspaceSession(updatedUser)
     window.location.href = getDefaultWorkspacePath(updatedUser, c.slug)
   }
@@ -146,7 +136,7 @@ export default function HubPage() {
         )}
 
         {/* ENTREPRISES GRID */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16,marginBottom:24}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:16,marginBottom:24}}>
           {companies.map((c: any) => (
             <div key={c.company_id}
               onClick={() => enterCompany(c)}
@@ -174,6 +164,11 @@ export default function HubPage() {
                   ★ Principale
                 </span>
               )}
+              {!c.is_primary && !c.is_platform_admin && (
+                <span style={{position:'absolute',top:12,right:12,fontSize:10,background:'rgba(22,163,74,0.1)',color:'#15803d',padding:'3px 9px',borderRadius:20,fontWeight:600}}>
+                  Espace separe
+                </span>
+              )}
               {c.is_platform_admin && (
                 <span style={{position:'absolute',top:12,right:12,fontSize:10,background:'linear-gradient(135deg,#7c3aed,#5B3DF5)',color:'#fff',padding:'3px 9px',borderRadius:20,fontWeight:600}}>
                   👑 Admin RS
@@ -194,11 +189,22 @@ export default function HubPage() {
                 </div>
               </div>
               
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+                <div style={{background:'#f8f7f5',border:'1px solid rgba(0,0,0,0.05)',borderRadius:8,padding:'8px 10px'}}>
+                  <div style={{fontSize:9,color:'#a8a69e',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>Donnees</div>
+                  <div style={{fontSize:11,color:'#1a1916',fontWeight:700,marginTop:2}}>Independantes</div>
+                </div>
+                <div style={{background:'#f8f7f5',border:'1px solid rgba(0,0,0,0.05)',borderRadius:8,padding:'8px 10px'}}>
+                  <div style={{fontSize:9,color:'#a8a69e',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>Equipe</div>
+                  <div style={{fontSize:11,color:'#1a1916',fontWeight:700,marginTop:2}}>Par entreprise</div>
+                </div>
+              </div>
+
               <div style={{fontSize:11,color:'#a8a69e',display:'flex',alignItems:'center',gap:6,paddingTop:12,borderTop:'1px solid rgba(0,0,0,0.05)'}}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
-                Entrer dans l'entreprise
+                Ouvrir cet espace de travail
               </div>
             </div>
           ))}

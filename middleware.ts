@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { getCompanyWorkspaceBySlug } from '@/lib/company-workspace'
 import { getLegacyDashboardRedirect } from '@/lib/workspace'
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const parts = pathname.split('/').filter(Boolean)
   const dashboardIndex = parts.indexOf('dashboard')
