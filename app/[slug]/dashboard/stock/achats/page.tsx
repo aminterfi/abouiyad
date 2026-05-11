@@ -307,25 +307,30 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
       formData.append('companyId', user.company_id)
       formData.append('creatorEmail', user.email || '')
 
-      const functionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/achats-extract`
-      const response = await fetch(functionUrl, {
-        method: 'POST',
+      const { data, error: invokeError } = await supabase.functions.invoke('achats-extract', {
+        body: formData,
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-        body: formData,
       })
 
-      const result = await response.json()
-      if (!response.ok) {
+      if (invokeError) {
+        throw new Error(invokeError.message || 'Fonction IA Supabase indisponible.')
+      }
+
+      const result = data as { extraction?: ExtractionPayload; error?: string } | null
+      if (!result?.extraction) {
         throw new Error(result?.error || 'Analyse impossible.')
       }
 
-      applyExtraction(result.extraction as ExtractionPayload)
+      applyExtraction(result.extraction)
       setMessage(`Document analyse: ${file.name}. Verifiez les champs avant enregistrement.`)
     } catch (requestError: unknown) {
       const nextError = requestError instanceof Error ? requestError.message : 'Analyse impossible.'
-      setError(nextError)
+      const friendlyError = nextError.toLowerCase().includes('failed to fetch')
+        ? "Fonction IA Supabase indisponible. Il faut deployer la fonction 'achats-extract' et ajouter OPENAI_API_KEY dans les secrets Supabase."
+        : nextError
+      setError(friendlyError)
     } finally {
       setExtracting(false)
       event.target.value = ''
