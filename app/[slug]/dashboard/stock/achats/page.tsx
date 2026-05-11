@@ -384,11 +384,11 @@ export default function StockAchatsPage() {
                 {[
                   'Produit',
                   'Quantite',
-                  mode === 'import' ? `Prix achat final (${currency})` : `Prix achat (${currency})`,
+                  `Prix achat saisi (${currency})`,
+                  mode === 'import' ? `Nouveau prix (${currency})` : 'Valeur finale',
+                  mode === 'import' ? 'Frais repartis' : 'Total ligne',
                   'Code lot',
                   'Notes',
-                  mode === 'import' ? 'Frais repartis' : 'Total ligne',
-                  mode === 'import' ? 'Detail prix' : 'Valeur finale',
                   '',
                 ].map((header) => (
                   <th key={header} style={{ fontSize: 11, fontWeight: 600, color: '#a8a69e', textTransform: 'uppercase', padding: '10px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}>{header}</th>
@@ -411,7 +411,7 @@ export default function StockAchatsPage() {
                     <td style={{ padding: '10px 12px', minWidth: 120 }}>
                       <input type="number" min="0" step="0.01" value={line.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} style={{ ...inp, background: '#fff' }} />
                     </td>
-                    <td style={{ padding: '10px 12px', minWidth: 140 }}>
+                    <td style={{ padding: '10px 12px', minWidth: 160 }}>
                       <input type="number" min="0" step="0.01" value={line.unitCost} onChange={(e) => updateLine(index, { unitCost: e.target.value })} style={{ ...inp, background: '#fff' }} />
                       <div style={{ fontSize: 10, color: '#6b6860', marginTop: 4 }}>
                         {mode === 'import'
@@ -419,16 +419,7 @@ export default function StockAchatsPage() {
                           : `Total ligne: ${formatMoney(preview?.baseTotal || 0, currency)}`}
                       </div>
                     </td>
-                    <td style={{ padding: '10px 12px', minWidth: 150 }}>
-                      <input value={line.lotCode} onChange={(e) => updateLine(index, { lotCode: e.target.value })} placeholder={`LOT-${index + 1}`} style={{ ...inp, background: '#fff', fontFamily: 'JetBrains Mono,monospace' }} />
-                    </td>
-                    <td style={{ padding: '10px 12px', minWidth: 220 }}>
-                      <input value={line.notes} onChange={(e) => updateLine(index, { notes: e.target.value })} placeholder="Commentaire ligne" style={{ ...inp, background: '#fff' }} />
-                    </td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: mode === 'import' ? '#d97706' : '#6b6860' }}>
-                      {mode === 'import' ? formatMoney(preview?.extraAllocated || 0, currency) : formatMoney(preview?.baseTotal || 0, currency)}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: '#16a34a', fontWeight: 700 }}>
+                    <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: '#16a34a', fontWeight: 700, minWidth: 170 }}>
                       <div>{formatMoney(preview?.effectiveUnitCost || 0, currency)}</div>
                       <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 3 }}>
                         Ligne valorisee: {formatMoney(roundMoney((preview?.quantity || 0) * (preview?.effectiveUnitCost || 0)), currency)}
@@ -438,6 +429,15 @@ export default function StockAchatsPage() {
                           base {formatMoney(preview?.unitCost || 0, currency)} + frais {formatMoney(preview?.extraAllocated || 0, currency)}
                         </div>
                       )}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: mode === 'import' ? '#d97706' : '#6b6860', minWidth: 130 }}>
+                      {mode === 'import' ? formatMoney(preview?.extraAllocated || 0, currency) : formatMoney(preview?.baseTotal || 0, currency)}
+                    </td>
+                    <td style={{ padding: '10px 12px', minWidth: 150 }}>
+                      <input value={line.lotCode} onChange={(e) => updateLine(index, { lotCode: e.target.value })} placeholder={`LOT-${index + 1}`} style={{ ...inp, background: '#fff', fontFamily: 'JetBrains Mono,monospace' }} />
+                    </td>
+                    <td style={{ padding: '10px 12px', minWidth: 220 }}>
+                      <input value={line.notes} onChange={(e) => updateLine(index, { notes: e.target.value })} placeholder="Commentaire ligne" style={{ ...inp, background: '#fff' }} />
                     </td>
                     <td style={{ padding: '10px 12px', width: 44 }}>
                       <button onClick={() => removeLine(index)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(220,38,38,0.18)', background: 'rgba(220,38,38,0.05)', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>-</button>
