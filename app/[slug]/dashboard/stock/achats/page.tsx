@@ -29,6 +29,11 @@ function roundMoney(value: number) {
   return Math.round((Number(value) || 0) * 100) / 100
 }
 
+function parseInputAmount(value: string) {
+  const parsed = Number(value || 0)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 const inp: React.CSSProperties = {
   width: '100%',
   background: '#f0eeea',
@@ -124,8 +129,8 @@ export default function StockAchatsPage() {
 
   const linePreview = useMemo(() => {
     const parsed = lines.map((line) => {
-      const quantity = Number(line.quantity || 0)
-      const unitCost = Number(line.unitCost || 0)
+      const quantity = parseInputAmount(line.quantity)
+      const unitCost = parseInputAmount(line.unitCost)
       const baseTotal = roundMoney(quantity * unitCost)
       return { ...line, quantity, unitCost, baseTotal }
     })
@@ -373,7 +378,7 @@ export default function StockAchatsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
             <thead>
               <tr style={{ background: '#f0eeea' }}>
-                {['Produit', 'Quantite', `Prix achat (${currency})`, 'Code lot', 'Notes', mode === 'import' ? 'Frais repartis' : 'Total ligne', 'Prix achat final', ''].map((header) => (
+                {['Produit', 'Quantite', `Prix achat saisi (${currency})`, 'Code lot', 'Notes', mode === 'import' ? 'Frais repartis' : 'Total ligne', 'Prix achat final', ''].map((header) => (
                   <th key={header} style={{ fontSize: 11, fontWeight: 600, color: '#a8a69e', textTransform: 'uppercase', padding: '10px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}>{header}</th>
                 ))}
               </tr>
@@ -396,6 +401,11 @@ export default function StockAchatsPage() {
                     </td>
                     <td style={{ padding: '10px 12px', minWidth: 140 }}>
                       <input type="number" min="0" step="0.01" value={line.unitCost} onChange={(e) => updateLine(index, { unitCost: e.target.value })} style={{ ...inp, background: '#fff' }} />
+                      <div style={{ fontSize: 10, color: '#6b6860', marginTop: 4 }}>
+                        {mode === 'import'
+                          ? `Base: ${formatMoney(preview?.unitCost || 0, currency)} | Ligne: ${formatMoney(preview?.baseTotal || 0, currency)}`
+                          : `Total ligne: ${formatMoney(preview?.baseTotal || 0, currency)}`}
+                      </div>
                     </td>
                     <td style={{ padding: '10px 12px', minWidth: 150 }}>
                       <input value={line.lotCode} onChange={(e) => updateLine(index, { lotCode: e.target.value })} placeholder={`LOT-${index + 1}`} style={{ ...inp, background: '#fff', fontFamily: 'JetBrains Mono,monospace' }} />
@@ -408,9 +418,12 @@ export default function StockAchatsPage() {
                     </td>
                     <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: '#16a34a', fontWeight: 700 }}>
                       <div>{formatMoney(preview?.effectiveUnitCost || 0, currency)}</div>
+                      <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 3 }}>
+                        Ligne valorisee: {formatMoney(roundMoney((preview?.quantity || 0) * (preview?.effectiveUnitCost || 0)), currency)}
+                      </div>
                       {mode === 'import' && (
                         <div style={{ fontSize: 10, color: '#6b6860', fontWeight: 500, marginTop: 3 }}>
-                          base {formatMoney(preview?.unitCost || 0, currency)} + frais
+                          base {formatMoney(preview?.unitCost || 0, currency)} + frais {formatMoney(preview?.extraAllocated || 0, currency)}
                         </div>
                       )}
                     </td>

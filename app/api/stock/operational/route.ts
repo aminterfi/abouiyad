@@ -64,9 +64,28 @@ function parsePositiveNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : NaN
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return 'Operation impossible.'
+}
+
 function isSchemaFallbackError(message: string) {
   const lower = message.toLowerCase()
   return lower.includes('does not exist') || lower.includes('schema cache') || lower.includes('column')
+}
+
+function buildGeneratedLotCode(prefix: string, productName: string) {
+  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const productPart = String(productName || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 4) || 'ART'
+  const uniquePart = crypto.randomUUID().slice(0, 8).toUpperCase()
+  return `${prefix}-${datePart}-${productPart}-${uniquePart}`
 }
 
 async function resolveWorkspaceCreator(
@@ -291,7 +310,7 @@ async function processManualMovement(
     })
 
     if (params.movementType !== 'adjustment_sub') {
-      const fallbackCode = params.lotCode || `LOT-${new Date().toISOString().slice(0, 10)}-${String(product.name || '').slice(0, 3).toUpperCase()}`
+      const fallbackCode = params.lotCode || buildGeneratedLotCode('LOT', product.name || '')
       const { data: lot, error: lotError } = await admin
         .from('stock_lots')
         .insert({
@@ -394,7 +413,7 @@ async function processManualMovement(
     await recomputeProductCost(admin, params.companyId, product.id, currentCost)
     return { movementId, valuationMethod }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : ''
+    const message = getErrorMessage(error)
     if (!isSchemaFallbackError(message)) throw error
 
     const movementId = await insertFallbackMovement(admin, {
@@ -538,7 +557,7 @@ async function processPurchaseReceipt(
       if (costError) throw costError
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : ''
+    const message = getErrorMessage(error)
     if (!isSchemaFallbackError(message)) throw error
   }
 
@@ -590,7 +609,7 @@ async function processPurchaseReceipt(
 
         if (itemError) throw itemError
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : ''
+        const message = getErrorMessage(error)
         if (!isSchemaFallbackError(message)) throw error
       }
     }
@@ -732,7 +751,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: 'Operation inconnue.' }, { status: 400 })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Operation impossible.'
+    const message = getErrorMessage(error)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
