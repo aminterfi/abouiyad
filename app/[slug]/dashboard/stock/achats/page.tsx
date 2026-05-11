@@ -278,7 +278,7 @@ export default function StockAchatsPage() {
     setAiSummary(extraction.confidenceSummary || 'Analyse terminee.')
   }
 
-  async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -295,14 +295,24 @@ export default function StockAchatsPage() {
         throw new Error('Entreprise introuvable dans la session.')
       }
 
+      const { data: authData, error: authError } = await supabase.auth.getSession()
+      if (authError) throw authError
+      const accessToken = authData.session?.access_token
+      if (!accessToken) {
+        throw new Error('Session Supabase introuvable. Reconnectez-vous puis recommencez.')
+      }
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('companyId', user.company_id)
-      formData.append('createdBy', user.id || '')
       formData.append('creatorEmail', user.email || '')
 
-      const response = await fetch('/api/achats/extract', {
+      const functionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/achats-extract`
+      const response = await fetch(functionUrl, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: formData,
       })
 

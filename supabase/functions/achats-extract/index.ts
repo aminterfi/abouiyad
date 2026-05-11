@@ -1,7 +1,10 @@
-import { NextResponse } from 'next/server'
-import { createAdminSupabaseClient } from '@/lib/admin-supabase'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 
-export const runtime = 'nodejs'
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
 
 type ProductOption = {
   id: string
@@ -20,11 +23,6 @@ type ExtractedLine = {
   confidence: number
 }
 
-type ExtractedExtraCost = {
-  name: string
-  amount: number
-}
-
 type ExtractedPurchase = {
   supplier_name: string
   reference_number: string | null
@@ -34,7 +32,7 @@ type ExtractedPurchase = {
   notes: string | null
   confidence_summary: string
   warnings: string[]
-  extra_costs: ExtractedExtraCost[]
+  extra_costs: Array<{ name: string; amount: number }>
   items: ExtractedLine[]
 }
 
@@ -67,27 +65,13 @@ const extractionSchema = {
     ],
     properties: {
       supplier_name: { type: 'string' },
-      reference_number: {
-        anyOf: [{ type: 'string' }, { type: 'null' }],
-      },
-      purchase_date: {
-        anyOf: [{ type: 'string' }, { type: 'null' }],
-      },
-      currency: {
-        anyOf: [{ type: 'string' }, { type: 'null' }],
-      },
-      purchase_type: {
-        type: 'string',
-        enum: ['simple', 'import'],
-      },
-      notes: {
-        anyOf: [{ type: 'string' }, { type: 'null' }],
-      },
+      reference_number: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      purchase_date: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      currency: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      purchase_type: { type: 'string', enum: ['simple', 'import'] },
+      notes: { anyOf: [{ type: 'string' }, { type: 'null' }] },
       confidence_summary: { type: 'string' },
-      warnings: {
-        type: 'array',
-        items: { type: 'string' },
-      },
+      warnings: { type: 'array', items: { type: 'string' } },
       extra_costs: {
         type: 'array',
         items: {
@@ -117,20 +101,12 @@ const extractionSchema = {
           ],
           properties: {
             raw_name: { type: 'string' },
-            matched_product_id: {
-              anyOf: [{ type: 'string' }, { type: 'null' }],
-            },
-            matched_product_name: {
-              anyOf: [{ type: 'string' }, { type: 'null' }],
-            },
+            matched_product_id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+            matched_product_name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
             quantity: { type: 'number' },
             unit_cost: { type: 'number' },
-            lot_code: {
-              anyOf: [{ type: 'string' }, { type: 'null' }],
-            },
-            notes: {
-              anyOf: [{ type: 'string' }, { type: 'null' }],
-            },
+            lot_code: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+            notes: { anyOf: [{ type: 'string' }, { type: 'null' }] },
             confidence: { type: 'number' },
           },
         },
@@ -139,6 +115,16 @@ const extractionSchema = {
   },
 } as const
 
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    },
+  })
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message
   if (error && typeof error === 'object' && 'message' in error) {
@@ -146,65 +132,6 @@ function getErrorMessage(error: unknown) {
     if (typeof message === 'string' && message.trim()) return message
   }
   return 'Analyse impossible.'
-}
-
-async function resolveWorkspaceCreator(
-  admin: ReturnType<typeof createAdminSupabaseClient>,
-  userId: string,
-  email: string,
-  companyId: string,
-) {
-  const [userResult, ownerResult, membershipResult] = await Promise.all([
-    userId
-      ? admin.from('users').select('id').eq('id', userId).eq('company_id', companyId).maybeSingle()
-      : admin.from('users').select('id').eq('id', '00000000-0000-0000-0000-000000000000').maybeSingle(),
-    userId
-      ? admin.from('owners').select('user_id').eq('user_id', userId).eq('company_id', companyId).maybeSingle()
-      : admin.from('owners').select('user_id').eq('user_id', '00000000-0000-0000-0000-000000000000').maybeSingle(),
-    userId
-      ? admin.from('workspace_memberships').select('user_id').eq('user_id', userId).eq('company_id', companyId).maybeSingle()
-      : admin.from('workspace_memberships').select('user_id').eq('user_id', '00000000-0000-0000-0000-000000000000').maybeSingle(),
-  ])
-
-  if (userResult.error && userResult.error.code !== 'PGRST116') throw userResult.error
-  if (ownerResult.error && ownerResult.error.code !== 'PGRST116') throw ownerResult.error
-  if (membershipResult.error && membershipResult.error.code !== 'PGRST116') throw membershipResult.error
-
-  if (userResult.data?.id) return userResult.data.id
-  if (ownerResult.data?.user_id) return ownerResult.data.user_id
-  if (membershipResult.data?.user_id) return membershipResult.data.user_id
-
-  if (email) {
-    const [userByEmail, ownerByEmail] = await Promise.all([
-      admin.from('users').select('id').eq('email', email).eq('company_id', companyId).maybeSingle(),
-      admin.from('owners').select('user_id').eq('email', email).eq('company_id', companyId).maybeSingle(),
-    ])
-
-    if (userByEmail.error && userByEmail.error.code !== 'PGRST116') throw userByEmail.error
-    if (ownerByEmail.error && ownerByEmail.error.code !== 'PGRST116') throw ownerByEmail.error
-
-    if (userByEmail.data?.id) return userByEmail.data.id
-    if (ownerByEmail.data?.user_id) return ownerByEmail.data.user_id
-  }
-
-  return null
-}
-
-async function loadCompanyProducts(
-  admin: ReturnType<typeof createAdminSupabaseClient>,
-  companyId: string,
-) {
-  const { data, error } = await admin
-    .from('products')
-    .select('id,name,unit')
-    .eq('company_id', companyId)
-    .eq('is_archived', false)
-    .eq('is_stockable', true)
-    .eq('track_stock', true)
-    .order('name')
-
-  if (error) throw error
-  return (data || []) as ProductOption[]
 }
 
 function buildProductCatalog(products: ProductOption[]) {
@@ -263,7 +190,7 @@ function normalizeExtraction(data: ExtractedPurchase, products: ProductOption[])
     currency: normalizeCurrency(data.currency) || 'DZD',
     purchaseType,
     notes: String(data.notes || '').trim() || null,
-    confidenceSummary: String(data.confidence_summary || '').trim() || 'Extraction terminee.',
+    confidenceSummary: String(data.confidence_summary || '').trim() || 'Analyse terminee.',
     warnings: Array.isArray(data.warnings)
       ? data.warnings.map((warning) => String(warning || '').trim()).filter(Boolean)
       : [],
@@ -272,17 +199,79 @@ function normalizeExtraction(data: ExtractedPurchase, products: ProductOption[])
   }
 }
 
-async function extractWithOpenAI(file: File, products: ProductOption[]) {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY manquante. Ajoutez-la cote serveur pour activer l'analyse IA.")
+async function resolveWorkspaceCreator(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  email: string,
+  companyId: string,
+) {
+  const [userResult, ownerResult, membershipResult] = await Promise.all([
+    userId
+      ? admin.from('users').select('id').eq('id', userId).eq('company_id', companyId).maybeSingle()
+      : admin.from('users').select('id').eq('id', '00000000-0000-0000-0000-000000000000').maybeSingle(),
+    userId
+      ? admin.from('owners').select('user_id').eq('user_id', userId).eq('company_id', companyId).maybeSingle()
+      : admin.from('owners').select('user_id').eq('user_id', '00000000-0000-0000-0000-000000000000').maybeSingle(),
+    userId
+      ? admin.from('workspace_memberships').select('user_id').eq('user_id', userId).eq('company_id', companyId).maybeSingle()
+      : admin.from('workspace_memberships').select('user_id').eq('user_id', '00000000-0000-0000-0000-000000000000').maybeSingle(),
+  ])
+
+  if (userResult.error && userResult.error.code !== 'PGRST116') throw userResult.error
+  if (ownerResult.error && ownerResult.error.code !== 'PGRST116') throw ownerResult.error
+  if (membershipResult.error && membershipResult.error.code !== 'PGRST116') throw membershipResult.error
+
+  if (userResult.data?.id) return userResult.data.id
+  if (ownerResult.data?.user_id) return ownerResult.data.user_id
+  if (membershipResult.data?.user_id) return membershipResult.data.user_id
+
+  if (email) {
+    const [userByEmail, ownerByEmail] = await Promise.all([
+      admin.from('users').select('id').eq('email', email).eq('company_id', companyId).maybeSingle(),
+      admin.from('owners').select('user_id').eq('email', email).eq('company_id', companyId).maybeSingle(),
+    ])
+
+    if (userByEmail.error && userByEmail.error.code !== 'PGRST116') throw userByEmail.error
+    if (ownerByEmail.error && ownerByEmail.error.code !== 'PGRST116') throw ownerByEmail.error
+
+    if (userByEmail.data?.id) return userByEmail.data.id
+    if (ownerByEmail.data?.user_id) return ownerByEmail.data.user_id
   }
 
-  const arrayBuffer = await file.arrayBuffer()
-  const base64 = Buffer.from(arrayBuffer).toString('base64')
+  return null
+}
+
+async function loadCompanyProducts(admin: ReturnType<typeof createClient>, companyId: string) {
+  const { data, error } = await admin
+    .from('products')
+    .select('id,name,unit')
+    .eq('company_id', companyId)
+    .eq('is_archived', false)
+    .eq('is_stockable', true)
+    .eq('track_stock', true)
+    .order('name')
+
+  if (error) throw error
+  return (data || []) as ProductOption[]
+}
+
+async function extractWithOpenAI(file: File, products: ProductOption[]) {
+  const apiKey = Deno.env.get('OPENAI_API_KEY')
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY manquante dans les secrets Supabase.")
+  }
+
+  const bytes = await file.arrayBuffer()
+  let binary = ''
+  const chunk = 0x8000
+  const view = new Uint8Array(bytes)
+  for (let index = 0; index < view.length; index += chunk) {
+    binary += String.fromCharCode(...view.subarray(index, index + chunk))
+  }
+  const base64 = btoa(binary)
   const mimeType = file.type || 'application/octet-stream'
   const isImage = mimeType.startsWith('image/')
-  const model = process.env.OPENAI_BON_ACHAT_MODEL || 'gpt-4o-mini'
+  const model = Deno.env.get('OPENAI_BON_ACHAT_MODEL') || 'gpt-4o-mini'
 
   const instructions = [
     'Tu analyses un bon d achat fournisseur pour une application de gestion de stock francophone.',
@@ -298,16 +287,11 @@ async function extractWithOpenAI(file: File, products: ProductOption[]) {
   ].join(' ')
 
   const catalog = buildProductCatalog(products) || '- aucun produit catalogue'
-
-  const userText = [
-    'Catalogue de produits stockables disponibles pour faire le rapprochement:',
-    catalog,
-    '',
-    'Analyse ce bon d achat et remplis le schema JSON demande.',
-  ].join('\n')
-
   const content: Array<Record<string, unknown>> = [
-    { type: 'input_text', text: userText },
+    {
+      type: 'input_text',
+      text: `Catalogue de produits stockables disponibles pour faire le rapprochement:\n${catalog}\n\nAnalyse ce bon d achat et remplis le schema JSON demande.`,
+    },
   ]
 
   if (isImage) {
@@ -348,49 +332,78 @@ async function extractWithOpenAI(file: File, products: ProductOption[]) {
 
   const payload = await response.json()
   if (!response.ok) {
-    const apiMessage = payload?.error?.message || 'Analyse OpenAI impossible.'
-    throw new Error(apiMessage)
+    throw new Error(payload?.error?.message || 'Analyse OpenAI impossible.')
   }
 
-  const outputText = typeof payload?.output_text === 'string'
-    ? payload.output_text
-    : ''
-
-  if (!outputText) {
+  if (typeof payload?.output_text !== 'string' || !payload.output_text) {
     throw new Error("L'IA n'a pas retourne de resultat exploitable.")
   }
 
-  return JSON.parse(outputText) as ExtractedPurchase
+  return JSON.parse(payload.output_text) as ExtractedPurchase
 }
 
-export async function POST(request: Request) {
+Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  if (request.method !== 'POST') {
+    return json({ error: 'Methode non supportee.' }, 405)
+  }
+
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+      throw new Error('Secrets Supabase incomplets pour la fonction.')
+    }
+
+    const authHeader = request.headers.get('Authorization') || ''
+    const token = authHeader.replace('Bearer ', '').trim()
+    if (!token) {
+      return json({ error: 'Session requise.' }, 401)
+    }
+
+    const authClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+
+    const { data: userData, error: authError } = await authClient.auth.getUser()
+    if (authError) throw authError
+    if (!userData.user) {
+      return json({ error: 'Session invalide.' }, 401)
+    }
+
     const formData = await request.formData()
     const companyId = String(formData.get('companyId') || '').trim()
-    const createdBy = String(formData.get('createdBy') || '').trim()
     const creatorEmail = String(formData.get('creatorEmail') || '').trim().toLowerCase()
     const file = formData.get('file')
 
-    if (!companyId || (!createdBy && !creatorEmail)) {
-      return NextResponse.json({ error: 'Informations utilisateur manquantes.' }, { status: 400 })
+    if (!companyId) {
+      return json({ error: 'Entreprise requise.' }, 400)
     }
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'Fichier requis.' }, { status: 400 })
+      return json({ error: 'Fichier requis.' }, 400)
     }
 
     if (!SUPPORTED_MIME_TYPES.has(file.type)) {
-      return NextResponse.json({ error: 'Formats supportes: PDF, PNG, JPG, WEBP.' }, { status: 400 })
+      return json({ error: 'Formats supportes: PDF, PNG, JPG, WEBP.' }, 400)
     }
 
     if (file.size > 12 * 1024 * 1024) {
-      return NextResponse.json({ error: 'Fichier trop volumineux. Maximum 12 MB.' }, { status: 400 })
+      return json({ error: 'Fichier trop volumineux. Maximum 12 MB.' }, 400)
     }
 
-    const admin = createAdminSupabaseClient()
-    const creatorId = await resolveWorkspaceCreator(admin, createdBy, creatorEmail, companyId)
+    const creatorId = await resolveWorkspaceCreator(admin, userData.user.id, creatorEmail || userData.user.email || '', companyId)
     if (!creatorId) {
-      return NextResponse.json({ error: 'Utilisateur non autorise pour cette entreprise.' }, { status: 403 })
+      return json({ error: 'Utilisateur non autorise pour cette entreprise.' }, 403)
     }
 
     const products = await loadCompanyProducts(admin, companyId)
@@ -404,12 +417,11 @@ export async function POST(request: Request) {
       ]
     }
 
-    return NextResponse.json({
+    return json({
       ok: true,
       extraction: normalized,
     })
   } catch (error: unknown) {
-    const message = getErrorMessage(error)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return json({ error: getErrorMessage(error) }, 500)
   }
-}
+})
