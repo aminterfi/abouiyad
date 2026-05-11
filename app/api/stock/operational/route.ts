@@ -22,10 +22,15 @@ type StockPayload = {
     countedQuantity?: number | string
   }>
   purchaseType?: 'simple' | 'import'
+  currency?: string | null
   supplierName?: string
   referenceNumber?: string | null
   purchaseDate?: string | null
   extraCostsTotal?: number | string | null
+  extraCosts?: Array<{
+    name?: string
+    amount?: number | string
+  }>
   items?: Array<{
     productId?: string
     quantity?: number | string
@@ -424,11 +429,15 @@ async function processPurchaseReceipt(
     createdBy: string
     creatorName: string
     purchaseType: 'simple' | 'import'
+    currency: string
     supplierName: string
     referenceNumber: string | null
     purchaseDate: string | null
     notes: string | null
-    extraCostsTotal: number
+    extraCosts: Array<{
+      name: string
+      amount: number
+    }>
     items: Array<{
       productId: string
       quantity: number
@@ -445,8 +454,16 @@ async function processPurchaseReceipt(
   const subtotal = roundMoney(
     params.items.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0),
   )
+  const normalizedCosts = params.purchaseType === 'import'
+    ? params.extraCosts
+      .map((cost) => ({
+        name: String(cost.name || '').trim(),
+        amount: roundMoney(Math.max(0, Number(cost.amount || 0))),
+      }))
+      .filter((cost) => cost.name && cost.amount > 0)
+    : []
   const extraCostsTotal = params.purchaseType === 'import'
-    ? roundMoney(Math.max(0, params.extraCostsTotal || 0))
+    ? roundMoney(normalizedCosts.reduce((sum, cost) => sum + cost.amount, 0))
     : 0
 
   const withAllocations = params.items.map((item) => {
@@ -493,6 +510,7 @@ async function processPurchaseReceipt(
         reference_number: params.referenceNumber,
         purchase_date: receivedAt,
         notes: params.notes,
+        currency: params.currency,
         extra_costs_total: extraCostsTotal,
         subtotal,
         grand_total: grandTotal,
@@ -505,6 +523,20 @@ async function processPurchaseReceipt(
 
     if (documentError) throw documentError
     purchaseDocumentId = purchaseDocument?.id || null
+
+    if (purchaseDocumentId && normalizedCosts.length > 0) {
+      const { error: costError } = await admin
+        .from('purchase_document_costs')
+        .insert(normalizedCosts.map((cost) => ({
+          company_id: params.companyId,
+          purchase_document_id: purchaseDocumentId,
+          cost_name: cost.name,
+          amount: cost.amount,
+          currency: params.currency,
+        })))
+
+      if (costError) throw costError
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : ''
     if (!isSchemaFallbackError(message)) throw error
@@ -656,11 +688,17 @@ export async function POST(request: Request) {
 
     if (kind === 'purchase_receipt') {
       const purchaseType = body.purchaseType === 'import' ? 'import' : 'simple'
+      const currency = String(body.currency || '').trim().toUpperCase() || 'DZD'
       const supplierName = String(body.supplierName || '').trim()
       const referenceNumber = String(body.referenceNumber || '').trim() || null
       const purchaseDate = String(body.purchaseDate || '').trim() || null
       const notes = String(body.notes || '').trim() || null
-      const extraCostsTotal = Math.max(0, parsePositiveNumber(body.extraCostsTotal))
+      const extraCosts = (Array.isArray(body.extraCosts) ? body.extraCosts : [])
+        .map((cost) => ({
+          name: String(cost.name || '').trim(),
+          amount: Math.max(0, parsePositiveNumber(cost.amount)),
+        }))
+        .filter((cost) => cost.name && Number.isFinite(cost.amount) && cost.amount > 0)
       const items = (Array.isArray(body.items) ? body.items : [])
         .map((item) => ({
           productId: String(item.productId || ''),
@@ -680,11 +718,12 @@ export async function POST(request: Request) {
         createdBy: creatorId,
         creatorName,
         purchaseType,
+        currency,
         supplierName,
         referenceNumber,
         purchaseDate,
         notes,
-        extraCostsTotal: Number.isFinite(extraCostsTotal) ? extraCostsTotal : 0,
+        extraCosts,
         items,
       })
 

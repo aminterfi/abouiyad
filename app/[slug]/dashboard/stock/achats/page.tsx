@@ -16,8 +16,13 @@ type PurchaseLine = {
   notes: string
 }
 
-function dzd(value: number) {
-  return (value || 0).toLocaleString('fr-DZ', { minimumFractionDigits: 2 }) + ' DZD'
+type ExtraCostLine = {
+  name: string
+  amount: string
+}
+
+function formatMoney(value: number, currency: string) {
+  return (value || 0).toLocaleString('fr-DZ', { minimumFractionDigits: 2 }) + ' ' + currency
 }
 
 function roundMoney(value: number) {
@@ -49,6 +54,8 @@ const SEGMENTS: Array<{ key: PurchaseMode; label: string; note: string }> = [
   { key: 'import', label: 'Bon d achat importation', note: 'Les autres frais sont repartis sur les lignes selon leur valeur.' },
 ]
 
+const CURRENCIES = ['DZD', 'EUR', 'USD', 'CNY', 'GBP']
+
 function createEmptyLine(): PurchaseLine {
   return {
     productId: '',
@@ -56,6 +63,13 @@ function createEmptyLine(): PurchaseLine {
     unitCost: '',
     lotCode: '',
     notes: '',
+  }
+}
+
+function createEmptyExtraCost(): ExtraCostLine {
+  return {
+    name: '',
+    amount: '',
   }
 }
 
@@ -71,9 +85,10 @@ export default function StockAchatsPage() {
   const [supplierName, setSupplierName] = useState('')
   const [referenceNumber, setReferenceNumber] = useState('')
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
-  const [extraCostsTotal, setExtraCostsTotal] = useState('')
+  const [currency, setCurrency] = useState('DZD')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<PurchaseLine[]>([createEmptyLine()])
+  const [extraCosts, setExtraCosts] = useState<ExtraCostLine[]>([createEmptyExtraCost()])
 
   useEffect(() => { load() }, [])
   useRealtime(['products', 'purchase_documents', 'purchase_document_items', 'stock_movements', 'stock_lots'], load, { intervalMs: 4000 })
@@ -96,7 +111,7 @@ export default function StockAchatsPage() {
         .order('name'),
       supabase
         .from('purchase_documents')
-        .select('id,supplier_name,document_kind,reference_number,purchase_date,subtotal,extra_costs_total,grand_total,created_at')
+        .select('id,supplier_name,document_kind,reference_number,purchase_date,currency,subtotal,extra_costs_total,grand_total,created_at')
         .eq('company_id', user.company_id)
         .order('created_at', { ascending: false })
         .limit(20),
@@ -116,7 +131,15 @@ export default function StockAchatsPage() {
     })
 
     const subtotal = roundMoney(parsed.reduce((sum, line) => sum + line.baseTotal, 0))
-    const extra = mode === 'import' ? roundMoney(Number(extraCostsTotal || 0)) : 0
+    const normalizedCosts = mode === 'import'
+      ? extraCosts
+        .map((cost) => ({
+          name: cost.name.trim(),
+          amount: roundMoney(Number(cost.amount || 0)),
+        }))
+        .filter((cost) => cost.name && cost.amount > 0)
+      : []
+    const extra = roundMoney(normalizedCosts.reduce((sum, cost) => sum + cost.amount, 0))
     const preview = parsed.map((line) => {
       const extraAllocated = subtotal > 0 && extra > 0 ? roundMoney(extra * (line.baseTotal / subtotal)) : 0
       const effectiveUnitCost = line.quantity > 0
@@ -141,9 +164,10 @@ export default function StockAchatsPage() {
       lines: preview,
       subtotal,
       extra,
+      normalizedCosts,
       grandTotal: roundMoney(subtotal + extra),
     }
-  }, [extraCostsTotal, lines, mode])
+  }, [extraCosts, lines, mode])
 
   function updateLine(index: number, patch: Partial<PurchaseLine>) {
     setLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line))
@@ -155,6 +179,18 @@ export default function StockAchatsPage() {
 
   function removeLine(index: number) {
     setLines((current) => current.length === 1 ? current : current.filter((_, lineIndex) => lineIndex !== index))
+  }
+
+  function updateExtraCost(index: number, patch: Partial<ExtraCostLine>) {
+    setExtraCosts((current) => current.map((cost, costIndex) => costIndex === index ? { ...cost, ...patch } : cost))
+  }
+
+  function addExtraCost() {
+    setExtraCosts((current) => [...current, createEmptyExtraCost()])
+  }
+
+  function removeExtraCost(index: number) {
+    setExtraCosts((current) => current.length === 1 ? current : current.filter((_, costIndex) => costIndex !== index))
   }
 
   async function submit() {
@@ -188,10 +224,16 @@ export default function StockAchatsPage() {
         createdBy: user.id,
         creatorEmail: user.email,
         purchaseType: mode,
+        currency,
         supplierName: supplierName.trim(),
         referenceNumber: referenceNumber.trim() || null,
         purchaseDate,
-        extraCostsTotal: mode === 'import' ? Number(extraCostsTotal || 0) : 0,
+        extraCosts: mode === 'import'
+          ? extraCosts.map((cost) => ({
+              name: cost.name,
+              amount: Number(cost.amount || 0),
+            }))
+          : [],
         notes: notes.trim() || null,
         items: payloadLines,
       }),
@@ -209,9 +251,10 @@ export default function StockAchatsPage() {
       : 'Bon d achat simple enregistre.')
     setSupplierName('')
     setReferenceNumber('')
-    setExtraCostsTotal('')
+    setCurrency('DZD')
     setNotes('')
     setLines([createEmptyLine()])
+    setExtraCosts([createEmptyExtraCost()])
     setSaving(false)
     load()
   }
@@ -275,8 +318,12 @@ export default function StockAchatsPage() {
           </div>
           {mode === 'import' && (
             <div>
-              <label style={lbl}>Autres frais a repartir</label>
-              <input type="number" min="0" step="0.01" value={extraCostsTotal} onChange={(e) => setExtraCostsTotal(e.target.value)} placeholder="0.00" style={inp} />
+              <label style={lbl}>Devise</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={inp}>
+                {CURRENCIES.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
             </div>
           )}
         </div>
@@ -285,6 +332,33 @@ export default function StockAchatsPage() {
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Transport, douane, precisions fournisseur..." style={{ ...inp, resize: 'vertical' }} />
         </div>
       </div>
+
+      {mode === 'import' && (
+        <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#a8a69e', textTransform: 'uppercase', letterSpacing: '.5px' }}>Autres frais</div>
+              <div style={{ fontSize: 12, color: '#6b6860', marginTop: 4 }}>Ajoutez plusieurs frais avec leur nom et leur montant.</div>
+            </div>
+            <button onClick={addExtraCost} style={{ padding: '8px 12px', fontSize: 12, background: '#2563EB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Ajouter un frais</button>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {extraCosts.map((cost, index) => (
+              <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(160px,.8fr) 44px', gap: 10, alignItems: 'end' }}>
+                <div>
+                  <label style={lbl}>Nom du frais</label>
+                  <input value={cost.name} onChange={(e) => updateExtraCost(index, { name: e.target.value })} placeholder="Transport, douane, assurance..." style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>Montant ({currency})</label>
+                  <input type="number" min="0" step="0.01" value={cost.amount} onChange={(e) => updateExtraCost(index, { amount: e.target.value })} placeholder="0.00" style={inp} />
+                </div>
+                <button onClick={() => removeExtraCost(index)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(220,38,38,0.18)', background: 'rgba(220,38,38,0.05)', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>-</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -299,7 +373,7 @@ export default function StockAchatsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
             <thead>
               <tr style={{ background: '#f0eeea' }}>
-                {['Produit', 'Quantite', 'Prix achat', 'Code lot', 'Notes', mode === 'import' ? 'Frais repartis' : 'Total ligne', 'Cout final', ''].map((header) => (
+                {['Produit', 'Quantite', `Prix achat (${currency})`, 'Code lot', 'Notes', mode === 'import' ? 'Frais repartis' : 'Total ligne', 'Prix achat final', ''].map((header) => (
                   <th key={header} style={{ fontSize: 11, fontWeight: 600, color: '#a8a69e', textTransform: 'uppercase', padding: '10px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}>{header}</th>
                 ))}
               </tr>
@@ -330,10 +404,15 @@ export default function StockAchatsPage() {
                       <input value={line.notes} onChange={(e) => updateLine(index, { notes: e.target.value })} placeholder="Commentaire ligne" style={{ ...inp, background: '#fff' }} />
                     </td>
                     <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: mode === 'import' ? '#d97706' : '#6b6860' }}>
-                      {mode === 'import' ? dzd(preview?.extraAllocated || 0) : dzd(preview?.baseTotal || 0)}
+                      {mode === 'import' ? formatMoney(preview?.extraAllocated || 0, currency) : formatMoney(preview?.baseTotal || 0, currency)}
                     </td>
                     <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: '#16a34a', fontWeight: 700 }}>
-                      {dzd(preview?.effectiveUnitCost || 0)}
+                      <div>{formatMoney(preview?.effectiveUnitCost || 0, currency)}</div>
+                      {mode === 'import' && (
+                        <div style={{ fontSize: 10, color: '#6b6860', fontWeight: 500, marginTop: 3 }}>
+                          base {formatMoney(preview?.unitCost || 0, currency)} + frais
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '10px 12px', width: 44 }}>
                       <button onClick={() => removeLine(index)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(220,38,38,0.18)', background: 'rgba(220,38,38,0.05)', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>-</button>
@@ -361,16 +440,16 @@ export default function StockAchatsPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 5 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1916' }}>{purchase.supplier_name}</div>
                   <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 999, background: purchase.document_kind === 'import' ? 'rgba(217,119,6,0.12)' : 'rgba(37,99,235,0.08)', color: purchase.document_kind === 'import' ? '#b45309' : '#2563EB', fontWeight: 700 }}>
-                    {purchase.document_kind === 'import' ? 'Importation' : 'Simple'}
+                    {purchase.document_kind === 'import' ? `Importation ${purchase.currency || 'DZD'}` : 'Simple'}
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: '#6b6860', marginBottom: 6 }}>
                   {purchase.reference_number || 'Sans reference'} · {new Date(purchase.purchase_date).toLocaleDateString('fr-DZ')}
                 </div>
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, color: '#6b6860' }}>
-                  <span>Sous-total: <strong style={{ color: '#1a1916' }}>{dzd(Number(purchase.subtotal || 0))}</strong></span>
-                  <span>Frais: <strong style={{ color: '#d97706' }}>{dzd(Number(purchase.extra_costs_total || 0))}</strong></span>
-                  <span>Total: <strong style={{ color: '#16a34a' }}>{dzd(Number(purchase.grand_total || 0))}</strong></span>
+                  <span>Sous-total: <strong style={{ color: '#1a1916' }}>{formatMoney(Number(purchase.subtotal || 0), purchase.currency || 'DZD')}</strong></span>
+                  <span>Frais: <strong style={{ color: '#d97706' }}>{formatMoney(Number(purchase.extra_costs_total || 0), purchase.currency || 'DZD')}</strong></span>
+                  <span>Total: <strong style={{ color: '#16a34a' }}>{formatMoney(Number(purchase.grand_total || 0), purchase.currency || 'DZD')}</strong></span>
                 </div>
               </div>
             ))}
@@ -384,18 +463,34 @@ export default function StockAchatsPage() {
               <span>Mode</span>
               <strong style={{ color: '#1a1916' }}>{mode === 'import' ? 'Importation' : 'Simple'}</strong>
             </div>
+            {mode === 'import' && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6b6860' }}>
+                <span>Devise</span>
+                <strong style={{ color: '#1a1916' }}>{currency}</strong>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6b6860' }}>
               <span>Sous-total lignes</span>
-              <strong style={{ color: '#1a1916' }}>{dzd(linePreview.subtotal)}</strong>
+              <strong style={{ color: '#1a1916' }}>{formatMoney(linePreview.subtotal, currency)}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6b6860' }}>
               <span>Autres frais</span>
-              <strong style={{ color: '#d97706' }}>{dzd(linePreview.extra)}</strong>
+              <strong style={{ color: '#d97706' }}>{formatMoney(linePreview.extra, currency)}</strong>
             </div>
+            {mode === 'import' && linePreview.normalizedCosts.length > 0 && (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {linePreview.normalizedCosts.map((cost, index) => (
+                  <div key={`${cost.name}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6b6860' }}>
+                    <span>{cost.name}</span>
+                    <strong style={{ color: '#1a1916' }}>{formatMoney(cost.amount, currency)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ height: 1, background: 'rgba(0,0,0,0.08)', margin: '2px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, color: '#1a1916' }}>
               <span style={{ fontWeight: 700 }}>Total valorise</span>
-              <strong style={{ color: '#16a34a' }}>{dzd(linePreview.grandTotal)}</strong>
+              <strong style={{ color: '#16a34a' }}>{formatMoney(linePreview.grandTotal, currency)}</strong>
             </div>
             <div style={{ fontSize: 11, color: '#6b6860', lineHeight: 1.6 }}>
               En importation, les autres frais sont repartis au prorata de la valeur des lignes. Le cout final des lots alimente directement votre methode FIFO, CUMP ou LIFO.
