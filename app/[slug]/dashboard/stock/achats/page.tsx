@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -19,6 +19,35 @@ type PurchaseLine = {
 type ExtraCostLine = {
   name: string
   amount: string
+}
+
+type ExtractionLine = {
+  raw_name: string
+  matched_product_id: string | null
+  matched_product_name: string | null
+  quantity: number
+  unit_cost: number
+  lot_code: string | null
+  notes: string | null
+  confidence: number
+}
+
+type ExtractionCost = {
+  name: string
+  amount: number
+}
+
+type ExtractionPayload = {
+  supplierName: string
+  referenceNumber: string | null
+  purchaseDate: string | null
+  currency: string
+  purchaseType: PurchaseMode
+  notes: string | null
+  confidenceSummary: string
+  warnings: string[]
+  extraCosts: ExtractionCost[]
+  items: ExtractionLine[]
 }
 
 function formatMoney(value: number, currency: string) {
@@ -59,7 +88,7 @@ const SEGMENTS: Array<{ key: PurchaseMode; label: string; note: string }> = [
   { key: 'import', label: 'Bon d achat importation', note: 'Les autres frais sont repartis sur les lignes au prorata des quantites achetees.' },
 ]
 
-const CURRENCIES = ['DZD', 'EUR', 'USD', 'CNY', 'GBP']
+const CURRENCIES = ['DZD', 'EUR', 'USD', 'CNY', 'GBP', 'MAD', 'TND']
 
 function createEmptyLine(): PurchaseLine {
   return {
@@ -80,12 +109,17 @@ function createEmptyExtraCost(): ExtraCostLine {
 
 export default function StockAchatsPage() {
   const { slug } = useParams() as { slug: string }
+  const aiFileInputRef = useRef<HTMLInputElement | null>(null)
   const [products, setProducts] = useState<any[]>([])
   const [purchases, setPurchases] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [extracting, setExtracting] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [aiWarnings, setAiWarnings] = useState<string[]>([])
+  const [aiSummary, setAiSummary] = useState('')
+  const [aiFileName, setAiFileName] = useState('')
   const [mode, setMode] = useState<PurchaseMode>('simple')
   const [supplierName, setSupplierName] = useState('')
   const [referenceNumber, setReferenceNumber] = useState('')
@@ -201,6 +235,93 @@ export default function StockAchatsPage() {
     setExtraCosts((current) => current.length === 1 ? current : current.filter((_, costIndex) => costIndex !== index))
   }
 
+  function clearAiFeedback() {
+    setAiWarnings([])
+    setAiSummary('')
+    setAiFileName('')
+  }
+
+  function applyExtraction(extraction: ExtractionPayload) {
+    const nextMode: PurchaseMode = extraction.purchaseType === 'import' || extraction.extraCosts.length > 0 ? 'import' : 'simple'
+    setMode(nextMode)
+    setSupplierName(extraction.supplierName || '')
+    setReferenceNumber(extraction.referenceNumber || '')
+    setPurchaseDate(extraction.purchaseDate || new Date().toISOString().slice(0, 10))
+    setCurrency(CURRENCIES.includes(extraction.currency) ? extraction.currency : 'DZD')
+    setNotes(extraction.notes || '')
+    setExtraCosts(
+      nextMode === 'import'
+        ? (extraction.extraCosts.length > 0
+          ? extraction.extraCosts.map((cost) => ({
+              name: cost.name,
+              amount: String(cost.amount || ''),
+            }))
+          : [createEmptyExtraCost()])
+        : [createEmptyExtraCost()],
+    )
+    setLines(
+      extraction.items.length > 0
+        ? extraction.items.map((item) => ({
+            productId: item.matched_product_id || '',
+            quantity: item.quantity > 0 ? String(item.quantity) : '1',
+            unitCost: item.unit_cost >= 0 ? String(item.unit_cost) : '',
+            lotCode: item.lot_code || '',
+            notes: [
+              item.raw_name && item.matched_product_name !== item.raw_name ? `Lu: ${item.raw_name}` : '',
+              item.notes || '',
+              !item.matched_product_id ? 'Produit a verifier.' : '',
+            ].filter(Boolean).join(' | '),
+          }))
+        : [createEmptyLine()],
+    )
+    setAiWarnings(extraction.warnings || [])
+    setAiSummary(extraction.confidenceSummary || 'Analyse terminee.')
+  }
+
+  async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setExtracting(true)
+    setError('')
+    setMessage('')
+    setAiWarnings([])
+    setAiSummary('')
+    setAiFileName(file.name)
+
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      if (!user.company_id) {
+        throw new Error('Entreprise introuvable dans la session.')
+      }
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('companyId', user.company_id)
+      formData.append('createdBy', user.id || '')
+      formData.append('creatorEmail', user.email || '')
+
+      const response = await fetch('/api/achats/extract', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result?.error || 'Analyse impossible.')
+      }
+
+      applyExtraction(result.extraction as ExtractionPayload)
+      setMessage(`Document analyse: ${file.name}. Verifiez les champs avant enregistrement.`)
+    } catch (requestError: unknown) {
+      const nextError = requestError instanceof Error ? requestError.message : 'Analyse impossible.'
+      setError(nextError)
+    } finally {
+      setExtracting(false)
+      event.target.value = ''
+    }
+  }
+
   async function submit() {
     setSaving(true)
     setError('')
@@ -263,6 +384,7 @@ export default function StockAchatsPage() {
     setNotes('')
     setLines([createEmptyLine()])
     setExtraCosts([createEmptyExtraCost()])
+    clearAiFeedback()
     setSaving(false)
     load()
   }
@@ -282,6 +404,56 @@ export default function StockAchatsPage() {
 
       {message && <div style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)', color: '#15803d', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{message}</div>}
       {error && <div style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{error}</div>}
+
+      <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ maxWidth: 680 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#a8a69e', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Lecture IA du bon d achat</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1916', marginBottom: 4 }}>Importer un PDF ou une image pour pre-remplir le formulaire</div>
+            <div style={{ fontSize: 12, color: '#6b6860', lineHeight: 1.6 }}>
+              L IA lit le document, propose le fournisseur, la devise, les lignes produit et les autres frais. Vous relisez puis vous enregistrez manuellement.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              ref={aiFileInputRef}
+              type="file"
+              accept=".pdf,image/png,image/jpeg,image/webp"
+              style={{ display: 'none' }}
+              onChange={handleAiFileChange}
+            />
+            <button
+              type="button"
+              onClick={() => aiFileInputRef.current?.click()}
+              disabled={extracting}
+              style={{ padding: '10px 14px', borderRadius: 7, border: '1px solid rgba(37,99,235,0.18)', background: extracting ? '#cfd7e6' : '#2563EB', color: '#fff', cursor: extracting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}
+            >
+              {extracting ? 'Analyse en cours...' : 'Charger un bon d achat'}
+            </button>
+          </div>
+        </div>
+        {(aiFileName || aiSummary || aiWarnings.length > 0) && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(0,0,0,0.06)', display: 'grid', gap: 8 }}>
+            {aiFileName && (
+              <div style={{ fontSize: 12, color: '#6b6860' }}>
+                Document: <strong style={{ color: '#1a1916' }}>{aiFileName}</strong>
+              </div>
+            )}
+            {aiSummary && (
+              <div style={{ fontSize: 12, color: '#1a1916' }}>{aiSummary}</div>
+            )}
+            {aiWarnings.length > 0 && (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {aiWarnings.map((warning, index) => (
+                  <div key={`${warning}-${index}`} style={{ fontSize: 12, color: '#b45309', background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.15)', borderRadius: 7, padding: '8px 10px' }}>
+                    {warning}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#a8a69e', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Type de bon d achat</div>
