@@ -386,6 +386,7 @@ export default function StockAchatsPage() {
                   'Quantite',
                   `Prix achat saisi (${currency})`,
                   mode === 'import' ? `Nouveau prix (${currency})` : 'Valeur finale',
+                  'Sous-total ligne',
                   mode === 'import' ? 'Frais repartis' : 'Total ligne',
                   'Code lot',
                   'Notes',
@@ -421,14 +422,14 @@ export default function StockAchatsPage() {
                     </td>
                     <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: '#16a34a', fontWeight: 700, minWidth: 170 }}>
                       <div>{formatMoney(preview?.effectiveUnitCost || 0, currency)}</div>
-                      <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 600, marginTop: 3 }}>
-                        Ligne valorisee: {formatMoney(roundMoney((preview?.quantity || 0) * (preview?.effectiveUnitCost || 0)), currency)}
-                      </div>
                       {mode === 'import' && (
                         <div style={{ fontSize: 10, color: '#6b6860', fontWeight: 500, marginTop: 3 }}>
                           base {formatMoney(preview?.unitCost || 0, currency)} + frais {formatMoney(preview?.extraAllocated || 0, currency)}
                         </div>
                       )}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: '#1a1916', fontWeight: 700, minWidth: 150 }}>
+                      {formatMoney(roundMoney((preview?.quantity || 0) * (preview?.effectiveUnitCost || 0)), currency)}
                     </td>
                     <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'JetBrains Mono,monospace', color: mode === 'import' ? '#d97706' : '#6b6860', minWidth: 130 }}>
                       {mode === 'import' ? formatMoney(preview?.extraAllocated || 0, currency) : formatMoney(preview?.baseTotal || 0, currency)}
