@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useRealtime } from '@/lib/useRealtime'
+import { scanPurchaseDocument, type ProductOption, type ScannedPurchasePayload } from '@/lib/purchase-scanner'
 
 type PurchaseMode = 'simple' | 'import'
 
@@ -19,35 +20,6 @@ type PurchaseLine = {
 type ExtraCostLine = {
   name: string
   amount: string
-}
-
-type ExtractionLine = {
-  raw_name: string
-  matched_product_id: string | null
-  matched_product_name: string | null
-  quantity: number
-  unit_cost: number
-  lot_code: string | null
-  notes: string | null
-  confidence: number
-}
-
-type ExtractionCost = {
-  name: string
-  amount: number
-}
-
-type ExtractionPayload = {
-  supplierName: string
-  referenceNumber: string | null
-  purchaseDate: string | null
-  currency: string
-  purchaseType: PurchaseMode
-  notes: string | null
-  confidenceSummary: string
-  warnings: string[]
-  extraCosts: ExtractionCost[]
-  items: ExtractionLine[]
 }
 
 function formatMoney(value: number, currency: string) {
@@ -110,7 +82,7 @@ function createEmptyExtraCost(): ExtraCostLine {
 export default function StockAchatsPage() {
   const { slug } = useParams() as { slug: string }
   const aiFileInputRef = useRef<HTMLInputElement | null>(null)
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<ProductOption[]>([])
   const [purchases, setPurchases] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -241,7 +213,7 @@ export default function StockAchatsPage() {
     setAiFileName('')
   }
 
-  function applyExtraction(extraction: ExtractionPayload) {
+  function applyExtraction(extraction: ScannedPurchasePayload) {
     const nextMode: PurchaseMode = extraction.purchaseType === 'import' || extraction.extraCosts.length > 0 ? 'import' : 'simple'
     setMode(nextMode)
     setSupplierName(extraction.supplierName || '')
@@ -295,42 +267,12 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         throw new Error('Entreprise introuvable dans la session.')
       }
 
-      const { data: authData, error: authError } = await supabase.auth.getSession()
-      if (authError) throw authError
-      const accessToken = authData.session?.access_token
-      if (!accessToken) {
-        throw new Error('Session Supabase introuvable. Reconnectez-vous puis recommencez.')
-      }
-
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('companyId', user.company_id)
-      formData.append('creatorEmail', user.email || '')
-
-      const { data, error: invokeError } = await supabase.functions.invoke('achats-extract', {
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
-      if (invokeError) {
-        throw new Error(invokeError.message || 'Fonction IA Supabase indisponible.')
-      }
-
-      const result = data as { extraction?: ExtractionPayload; error?: string } | null
-      if (!result?.extraction) {
-        throw new Error(result?.error || 'Analyse impossible.')
-      }
-
-      applyExtraction(result.extraction)
-      setMessage(`Document analyse: ${file.name}. Verifiez les champs avant enregistrement.`)
+      const extraction = await scanPurchaseDocument(file, products)
+      applyExtraction(extraction)
+      setMessage(`Document analyse localement: ${file.name}. Verifiez les champs avant enregistrement.`)
     } catch (requestError: unknown) {
       const nextError = requestError instanceof Error ? requestError.message : 'Analyse impossible.'
-      const friendlyError = nextError.toLowerCase().includes('failed to fetch')
-        ? "Fonction IA Supabase indisponible. Il faut deployer la fonction 'achats-extract' et ajouter OPENAI_API_KEY dans les secrets Supabase."
-        : nextError
-      setError(friendlyError)
+      setError(nextError)
     } finally {
       setExtracting(false)
       event.target.value = ''
@@ -426,7 +368,7 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
             <div style={{ fontSize: 11, fontWeight: 700, color: '#a8a69e', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Lecture IA du bon d achat</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1916', marginBottom: 4 }}>Importer un PDF ou une image pour pre-remplir le formulaire</div>
             <div style={{ fontSize: 12, color: '#6b6860', lineHeight: 1.6 }}>
-              L IA lit le document, propose le fournisseur, la devise, les lignes produit et les autres frais. Vous relisez puis vous enregistrez manuellement.
+              Le scanner gratuit lit le document, propose le fournisseur, la devise, les lignes produit et les autres frais. Vous relisez puis vous enregistrez manuellement.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -443,7 +385,7 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
               disabled={extracting}
               style={{ padding: '10px 14px', borderRadius: 7, border: '1px solid rgba(37,99,235,0.18)', background: extracting ? '#cfd7e6' : '#2563EB', color: '#fff', cursor: extracting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}
             >
-              {extracting ? 'Analyse en cours...' : 'Charger un bon d achat'}
+              {extracting ? 'Analyse en cours...' : 'Scanner un bon d achat'}
             </button>
           </div>
         </div>
