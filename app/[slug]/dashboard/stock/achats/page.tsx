@@ -368,7 +368,7 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
             <div style={{ fontSize: 11, fontWeight: 700, color: '#a8a69e', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Lecture IA du bon d achat</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1916', marginBottom: 4 }}>Importer un PDF ou une image pour pre-remplir le formulaire</div>
             <div style={{ fontSize: 12, color: '#6b6860', lineHeight: 1.6 }}>
-              Le scanner gratuit lit le document, propose le fournisseur, la devise, les lignes produit et les autres frais. Vous relisez puis vous enregistrez manuellement.
+              Le scanner gratuit lit les factures d'achat, bons d'achat et documents fournisseurs, puis propose le fournisseur, la devise, les lignes produit et les autres frais. Vous relisez puis vous enregistrez manuellement.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -385,7 +385,7 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
               disabled={extracting}
               style={{ padding: '10px 14px', borderRadius: 7, border: '1px solid rgba(37,99,235,0.18)', background: extracting ? '#cfd7e6' : '#2563EB', color: '#fff', cursor: extracting ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}
             >
-              {extracting ? 'Analyse en cours...' : 'Scanner un bon d achat'}
+              {extracting ? 'Analyse en cours...' : "Scanner un document d'achat"}
             </button>
           </div>
         </div>
