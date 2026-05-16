@@ -35,6 +35,7 @@ export type ScannedPurchasePayload = {
   currency: string
   purchaseType: 'simple' | 'import'
   documentKind: 'purchase_invoice' | 'purchase_order' | 'unknown'
+  vatSummary: string | null
   notes: string | null
   confidenceSummary: string
   warnings: string[]
@@ -272,6 +273,21 @@ function findDocumentDate(lines: string[]) {
   return null
 }
 
+function findVatSummary(lines: string[]) {
+  const vatLines = lines
+    .filter((line) => /tva|taxe|vat/i.test(line))
+    .map((line) => normalizeSpace(line))
+    .filter(Boolean)
+
+  if (!vatLines.length) return null
+
+  const useful = vatLines
+    .slice(0, 3)
+    .join(' | ')
+
+  return useful || null
+}
+
 function extractExtraCosts(lines: string[]) {
   const costs: ScannedExtraCost[] = []
 
@@ -372,11 +388,12 @@ export async function scanPurchaseDocument(file: File, products: ProductOption[]
 
   const documentKind = detectDocumentKind(rawText)
   const items = extractItemCandidates(lines, products)
-  const extraCosts = extractExtraCosts(lines)
+  const extraCosts: ScannedExtraCost[] = []
   const purchaseDate = findDocumentDate(lines)
   const supplierName = findSupplier(lines)
   const referenceNumber = findReference(lines)
   const currency = detectCurrency(rawText)
+  const vatSummary = findVatSummary(lines)
   const warnings: string[] = []
 
   if (!items.length) warnings.push("Aucune ligne produit fiable n'a ete detectee. Verifiez les produits manuellement.")
@@ -398,9 +415,10 @@ export async function scanPurchaseDocument(file: File, products: ProductOption[]
     referenceNumber,
     purchaseDate,
     currency,
-    purchaseType: extraCosts.length > 0 ? 'import' : 'simple',
+    purchaseType: 'simple',
     documentKind,
-    notes: null,
+    vatSummary,
+    notes: vatSummary ? `TVA detectee: ${vatSummary}` : null,
     confidenceSummary: items.length > 0
       ? `Lecture locale terminee sur ${documentLabel}. Verifiez les champs detectes avant enregistrement.`
       : `Lecture locale terminee sur ${documentLabel}, mais le document demande encore une verification manuelle.`,
