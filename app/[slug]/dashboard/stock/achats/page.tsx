@@ -14,7 +14,7 @@ type PurchaseLine = {
   quantity: string
   unitCost: string
   lotCode: string
-  notes: string
+  description: string
 }
 
 type ExtraCostLine = {
@@ -68,7 +68,7 @@ function createEmptyLine(): PurchaseLine {
     quantity: '1',
     unitCost: '',
     lotCode: '',
-    notes: '',
+    description: '',
   }
 }
 
@@ -213,35 +213,94 @@ export default function StockAchatsPage() {
     setAiFileName('')
   }
 
-  function applyExtraction(extraction: ScannedPurchasePayload) {
+  async function ensureScannedProducts(extraction: ScannedPurchasePayload) {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!user.company_id || !user.id) return extraction
+
+    const unresolved = extraction.items.filter((item) => !item.matched_product_id && item.raw_name.trim())
+    if (!unresolved.length) return extraction
+
+    const createdMap = new Map<string, string>()
+
+    for (const item of unresolved) {
+      const key = item.raw_name.trim()
+      if (createdMap.has(key)) continue
+
+      const { data: existing } = await supabase
+        .from('products')
+        .select('id,name')
+        .eq('company_id', user.company_id)
+        .ilike('name', key.slice(0, 120))
+        .maybeSingle()
+
+      if (existing?.id) {
+        createdMap.set(key, existing.id)
+        continue
+      }
+
+      const { data: created, error: createError } = await supabase
+        .from('products')
+        .insert({
+          company_id: user.company_id,
+          created_by: user.id,
+          name: key.slice(0, 120),
+          description: key,
+          category: 'Produit',
+          is_available: true,
+          is_stockable: true,
+          track_stock: true,
+          stock_quantity: 0,
+          stock_alert_threshold: 5,
+          price: Number(item.unit_cost || 0),
+          cost_price: Number(item.unit_cost || 0),
+          unit: 'unité',
+        })
+        .select('id')
+        .single()
+
+      if (!createError && created?.id) {
+        createdMap.set(key, created.id)
+      }
+    }
+
+    if (!createdMap.size) return extraction
+
+    return {
+      ...extraction,
+      items: extraction.items.map((item) => ({
+        ...item,
+        matched_product_id: item.matched_product_id || createdMap.get(item.raw_name.trim()) || null,
+      })),
+    }
+  }
+
+  async function applyExtraction(extraction: ScannedPurchasePayload) {
+    const hydratedExtraction = await ensureScannedProducts(extraction)
     const nextMode: PurchaseMode = 'simple'
     setMode(nextMode)
-    setSupplierName(extraction.supplierName || '')
-    setReferenceNumber(extraction.referenceNumber || '')
-    setPurchaseDate(extraction.purchaseDate || new Date().toISOString().slice(0, 10))
-    setCurrency(CURRENCIES.includes(extraction.currency) ? extraction.currency : 'DZD')
+    setSupplierName(hydratedExtraction.supplierName || '')
+    setReferenceNumber(hydratedExtraction.referenceNumber || '')
+    setPurchaseDate(hydratedExtraction.purchaseDate || new Date().toISOString().slice(0, 10))
+    setCurrency(CURRENCIES.includes(hydratedExtraction.currency) ? hydratedExtraction.currency : 'DZD')
     setNotes([
-      extraction.clientName ? `Client detecte: ${extraction.clientName}` : '',
-      extraction.notes || '',
+      hydratedExtraction.clientName ? `Client detecte: ${hydratedExtraction.clientName}` : '',
+      hydratedExtraction.notes || '',
     ].filter(Boolean).join(' | '))
     setExtraCosts([createEmptyExtraCost()])
     setLines(
-      extraction.items.length > 0
-        ? extraction.items.map((item) => ({
+      hydratedExtraction.items.length > 0
+        ? hydratedExtraction.items.map((item) => ({
             productId: item.matched_product_id || '',
             quantity: item.quantity > 0 ? String(item.quantity) : '1',
             unitCost: item.unit_cost >= 0 ? String(item.unit_cost) : '',
             lotCode: item.lot_code || '',
-            notes: [
-              item.raw_name && item.matched_product_name !== item.raw_name ? `Lu: ${item.raw_name}` : '',
-              item.notes || '',
-              !item.matched_product_id ? 'Produit a verifier.' : '',
-            ].filter(Boolean).join(' | '),
+            description: item.raw_name || '',
           }))
         : [createEmptyLine()],
     )
-    setAiWarnings(extraction.warnings || [])
-    setAiSummary(extraction.confidenceSummary || 'Analyse terminee.')
+    setAiWarnings(hydratedExtraction.warnings || [])
+    setAiSummary(hydratedExtraction.confidenceSummary || 'Analyse terminee.')
+    await load()
   }
 
 async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -262,7 +321,7 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
       }
 
       const extraction = await scanPurchaseDocument(file, products)
-      applyExtraction(extraction)
+      await applyExtraction(extraction)
       setMessage(`Document analyse localement: ${file.name}. Verifiez les champs avant enregistrement.`)
     } catch (requestError: unknown) {
       const nextError = requestError instanceof Error ? requestError.message : 'Analyse impossible.'
@@ -285,7 +344,7 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         quantity: Number(line.quantity || 0),
         unitCost: Number(line.unitCost || 0),
         lotCode: line.lotCode || null,
-        notes: line.notes || null,
+        notes: null,
       }))
       .filter((line) => line.productId && line.quantity > 0 && line.unitCost >= 0)
 
@@ -512,7 +571,7 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
                   'Sous-total ligne',
                   mode === 'import' ? 'Frais repartis' : 'Total ligne',
                   'Code lot',
-                  'Notes',
+                  'Description',
                   '',
                 ].map((header) => (
                   <th key={header} style={{ fontSize: 11, fontWeight: 600, color: '#a8a69e', textTransform: 'uppercase', padding: '10px 12px', textAlign: 'left', whiteSpace: 'nowrap' }}>{header}</th>
@@ -560,8 +619,8 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
                     <td style={{ padding: '10px 12px', minWidth: 150 }}>
                       <input value={line.lotCode} onChange={(e) => updateLine(index, { lotCode: e.target.value })} placeholder={`LOT-${index + 1}`} style={{ ...inp, background: '#fff', fontFamily: 'JetBrains Mono,monospace' }} />
                     </td>
-                    <td style={{ padding: '10px 12px', minWidth: 220 }}>
-                      <input value={line.notes} onChange={(e) => updateLine(index, { notes: e.target.value })} placeholder="Commentaire ligne" style={{ ...inp, background: '#fff' }} />
+                    <td style={{ padding: '10px 12px', minWidth: 260 }}>
+                      <textarea value={line.description} onChange={(e) => updateLine(index, { description: e.target.value })} rows={2} placeholder="Description du produit scanne" style={{ ...inp, background: '#fff', resize: 'vertical', minHeight: 52 }} />
                     </td>
                     <td style={{ padding: '10px 12px', width: 44 }}>
                       <button onClick={() => removeLine(index)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid rgba(220,38,38,0.18)', background: 'rgba(220,38,38,0.05)', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>-</button>
