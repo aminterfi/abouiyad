@@ -14,6 +14,7 @@ export type ProductOption = {
 
 export type ScannedPurchaseLine = {
   raw_name: string
+  raw_description: string | null
   matched_product_id: string | null
   matched_product_name: string | null
   quantity: number
@@ -33,6 +34,7 @@ export type ScannedPurchasePayload = {
   clientName: string | null
   referenceNumber: string | null
   purchaseDate: string | null
+  documentPlace: string | null
   currency: string
   purchaseType: 'simple' | 'import'
   documentKind: 'purchase_invoice' | 'purchase_order' | 'unknown'
@@ -310,6 +312,14 @@ function findDocumentDate(lines: string[]) {
   return null
 }
 
+function findDocumentPlace(lines: string[]) {
+  for (const line of lines) {
+    const match = line.match(/(?:le\s+\d{2}[\/.-]\d{2}[\/.-]\d{4}\s*,\s*)([A-Za-zÀ-ÿ' -]+)/i)
+    if (match) return normalizeSpace(match[1])
+  }
+  return null
+}
+
 function findVatSummary(lines: string[]) {
   const vatLines = lines
     .filter((line) => /tva|taxe|vat/i.test(line))
@@ -408,17 +418,25 @@ function extractItemCandidates(lines: string[], products: ProductOption[]) {
       : compact.replace(/-?\d[\d\s.,]*/g, ' ')
     const nextLine = normalizeSpace(lines[index + 1] || '')
     const nextIsShortDescriptor = nextLine && !/-?\d[\d\s.,]*/.test(nextLine) && nextLine.length <= 80 && !/total|tva|ttc/i.test(nextLine)
-    const rawName = normalizeSpace([
+    const mergedText = normalizeSpace([
       ...pendingDescription,
       beforeQty.replace(/\|/g, ' '),
       nextIsShortDescriptor ? nextLine.replace(/\|/g, ' ') : '',
     ].filter(Boolean).join(' '))
-    if (!rawName || rawName.length < 3 || /^[-. ]+$/.test(rawName)) continue
+    if (!mergedText || mergedText.length < 3 || /^[-. ]+$/.test(mergedText)) continue
     pendingDescription = []
+
+    const mergedParts = mergedText
+      .split(/\s{2,}|\s\|\s|\n/)
+      .map((part) => normalizeSpace(part))
+      .filter(Boolean)
+    const rawName = mergedParts[0] || mergedText
+    const rawDescription = mergedParts.length > 1 ? mergedParts.slice(1).join('\n') : null
 
     const matched = matchProduct(rawName, products)
     items.push({
       raw_name: rawName,
+      raw_description: rawDescription,
       matched_product_id: matched.product?.id || null,
       matched_product_name: matched.product?.name || null,
       quantity,
@@ -449,6 +467,7 @@ export async function scanPurchaseDocument(file: File, products: ProductOption[]
   const items = extractItemCandidates(lines, products)
   const extraCosts: ScannedExtraCost[] = []
   const purchaseDate = findDocumentDate(lines)
+  const documentPlace = findDocumentPlace(lines)
   const supplierName = findSupplier(lines)
   const clientName = findClient(lines)
   const referenceNumber = findReference(lines)
@@ -475,6 +494,7 @@ export async function scanPurchaseDocument(file: File, products: ProductOption[]
     clientName,
     referenceNumber,
     purchaseDate,
+    documentPlace,
     currency,
     purchaseType: 'simple',
     documentKind,

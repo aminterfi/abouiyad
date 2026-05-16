@@ -244,7 +244,7 @@ export default function StockAchatsPage() {
           company_id: user.company_id,
           created_by: user.id,
           name: key.slice(0, 120),
-          description: key,
+          description: item.raw_description || key,
           category: 'Produit',
           is_available: true,
           is_stockable: true,
@@ -284,6 +284,7 @@ export default function StockAchatsPage() {
     setCurrency(CURRENCIES.includes(hydratedExtraction.currency) ? hydratedExtraction.currency : 'DZD')
     setNotes([
       hydratedExtraction.clientName ? `Client detecte: ${hydratedExtraction.clientName}` : '',
+      hydratedExtraction.documentPlace ? `Lieu detecte: ${hydratedExtraction.documentPlace}` : '',
       hydratedExtraction.notes || '',
     ].filter(Boolean).join(' | '))
     setExtraCosts([createEmptyExtraCost()])
@@ -294,7 +295,7 @@ export default function StockAchatsPage() {
             quantity: item.quantity > 0 ? String(item.quantity) : '1',
             unitCost: item.unit_cost >= 0 ? String(item.unit_cost) : '',
             lotCode: item.lot_code || '',
-            description: item.raw_name || '',
+            description: item.raw_description || item.raw_name || '',
           }))
         : [createEmptyLine()],
     )
