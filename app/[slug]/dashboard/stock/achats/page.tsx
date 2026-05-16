@@ -220,7 +220,10 @@ export default function StockAchatsPage() {
     setReferenceNumber(extraction.referenceNumber || '')
     setPurchaseDate(extraction.purchaseDate || new Date().toISOString().slice(0, 10))
     setCurrency(CURRENCIES.includes(extraction.currency) ? extraction.currency : 'DZD')
-    setNotes(extraction.notes || '')
+    setNotes([
+      extraction.clientName ? `Client detecte: ${extraction.clientName}` : '',
+      extraction.notes || '',
+    ].filter(Boolean).join(' | '))
     setExtraCosts([createEmptyExtraCost()])
     setLines(
       extraction.items.length > 0

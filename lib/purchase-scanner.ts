@@ -30,6 +30,7 @@ export type ScannedExtraCost = {
 
 export type ScannedPurchasePayload = {
   supplierName: string
+  clientName: string | null
   referenceNumber: string | null
   purchaseDate: string | null
   currency: string
@@ -168,10 +169,36 @@ async function readPdfText(file: File) {
   for (let index = 1; index <= Math.min(pdf.numPages, 4); index += 1) {
     const page = await pdf.getPage(index)
     const content = await page.getTextContent()
-    const text = content.items
-      .map((item: any) => ('str' in item ? item.str : ''))
-      .join(' ')
-    pageTexts.push(normalizeSpace(text))
+    const rows = content.items
+      .filter((item: any) => 'str' in item)
+      .map((item: any) => ({
+        str: normalizeSpace(item.str || ''),
+        x: Math.round(item.transform?.[4] || 0),
+        y: Math.round(item.transform?.[5] || 0),
+      }))
+      .filter((item: { str: string }) => item.str)
+      .sort((a: { y: number; x: number }, b: { y: number; x: number }) => b.y - a.y || a.x - b.x)
+
+    const lines: string[] = []
+    let current: Array<{ str: string; x: number; y: number }> = []
+    let currentY: number | null = null
+
+    for (const row of rows) {
+      if (currentY === null || Math.abs(row.y - currentY) <= 2) {
+        currentY = currentY ?? row.y
+        current.push(row)
+      } else {
+        lines.push(current.sort((a, b) => a.x - b.x).map((item) => item.str).join(' | '))
+        currentY = row.y
+        current = [row]
+      }
+    }
+
+    if (current.length > 0) {
+      lines.push(current.sort((a, b) => a.x - b.x).map((item) => item.str).join(' | '))
+    }
+
+    pageTexts.push(lines.map((line) => normalizeSpace(line)).filter(Boolean).join('\n'))
   }
 
   return pageTexts.join('\n')
@@ -249,6 +276,16 @@ function findSupplier(lines: string[]) {
   return candidates[0] || ''
 }
 
+function findClient(lines: string[]) {
+  const dualColumn = lines
+    .slice(0, 6)
+    .map((line) => line.split('|').map((part) => normalizeSpace(part)).filter(Boolean))
+    .find((parts) => parts.length >= 2 && !/bon de commande|facture|invoice/i.test(parts.join(' ')))
+
+  if (dualColumn && dualColumn[1]) return dualColumn[1]
+  return null
+}
+
 function findReference(lines: string[]) {
   for (const line of lines) {
     const match = line.match(/(?:facture|invoice|ref(?:erence)?|bc|bl|bon|commande|n[\u00b0ºo])\s*[:\-#]?\s*([A-Z0-9\/._-]+)/i)
@@ -317,8 +354,10 @@ function extractExtraCosts(lines: string[]) {
 
 function extractItemCandidates(lines: string[], products: ProductOption[]) {
   const items: ScannedPurchaseLine[] = []
+  let pendingDescription: string[] = []
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
     if (items.length >= 20) break
     const compact = normalizeSpace(line)
     if (compact.length < 6) continue
@@ -327,6 +366,15 @@ function extractItemCandidates(lines: string[], products: ProductOption[]) {
     if (EXTRA_COST_KEYWORDS.some((keyword) => lower.includes(keyword))) continue
     if (PLACEHOLDER_PATTERNS.some((pattern) => lower.includes(pattern))) continue
     if (/total|montant|tva|ttc|net a payer|signature|cachet|date|echeance|siret|telephone|email/i.test(compact)) continue
+
+    const quantityWithUnit = compact.match(/(\d+(?:[.,]\d+)?)\s*\(([^)]+)\)/i)
+    const hasPricedRow = quantityWithUnit || (compact.match(/-?\d[\d\s.,]*/g) || []).length >= 3
+
+    if (!hasPricedRow) {
+      pendingDescription.push(compact.replace(/\|/g, ' '))
+      if (pendingDescription.length > 4) pendingDescription = pendingDescription.slice(-4)
+      continue
+    }
 
     const numbers = compact.match(/-?\d[\d\s.,]*/g) || []
     if (numbers.length < 2) continue
@@ -354,8 +402,19 @@ function extractItemCandidates(lines: string[], products: ProductOption[]) {
 
     if (!(quantity > 0) || !(unitCost >= 0)) continue
 
-    const rawName = normalizeSpace(compact.replace(/-?\d[\d\s.,]*/g, ' ').replace(/\s+/g, ' '))
+    const quantityLabel = quantityWithUnit?.[0] || ''
+    const beforeQty = quantityLabel
+      ? compact.split(quantityLabel)[0]
+      : compact.replace(/-?\d[\d\s.,]*/g, ' ')
+    const nextLine = normalizeSpace(lines[index + 1] || '')
+    const nextIsShortDescriptor = nextLine && !/-?\d[\d\s.,]*/.test(nextLine) && nextLine.length <= 80 && !/total|tva|ttc/i.test(nextLine)
+    const rawName = normalizeSpace([
+      ...pendingDescription,
+      beforeQty.replace(/\|/g, ' '),
+      nextIsShortDescriptor ? nextLine.replace(/\|/g, ' ') : '',
+    ].filter(Boolean).join(' '))
     if (!rawName || rawName.length < 3 || /^[-. ]+$/.test(rawName)) continue
+    pendingDescription = []
 
     const matched = matchProduct(rawName, products)
     items.push({
@@ -391,6 +450,7 @@ export async function scanPurchaseDocument(file: File, products: ProductOption[]
   const extraCosts: ScannedExtraCost[] = []
   const purchaseDate = findDocumentDate(lines)
   const supplierName = findSupplier(lines)
+  const clientName = findClient(lines)
   const referenceNumber = findReference(lines)
   const currency = detectCurrency(rawText)
   const vatSummary = findVatSummary(lines)
@@ -412,6 +472,7 @@ export async function scanPurchaseDocument(file: File, products: ProductOption[]
 
   return {
     supplierName,
+    clientName,
     referenceNumber,
     purchaseDate,
     currency,
