@@ -217,6 +217,58 @@ async function recomputeProductCost(
   }
 }
 
+async function insertStockMovementRecord(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  payload: Record<string, unknown>,
+) {
+  let result = await admin
+    .from('stock_movements')
+    .insert(payload)
+    .select('id')
+    .single()
+
+  if (result.error && isSchemaFallbackError(getErrorMessage(result.error))) {
+    const fallbackPayload = { ...payload }
+    delete fallbackPayload.lot_code
+    delete fallbackPayload.valuation_method
+    delete fallbackPayload.lot_id
+
+    result = await admin
+      .from('stock_movements')
+      .insert(fallbackPayload)
+      .select('id')
+      .single()
+  }
+
+  if (result.error) throw result.error
+  return result.data?.id || null
+}
+
+async function updateStockMovementRecord(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  movementId: string,
+  patch: Record<string, unknown>,
+) {
+  let result = await admin
+    .from('stock_movements')
+    .update(patch)
+    .eq('id', movementId)
+
+  if (result.error && isSchemaFallbackError(getErrorMessage(result.error))) {
+    const fallbackPatch = { ...patch }
+    delete fallbackPatch.lot_code
+    delete fallbackPatch.valuation_method
+    delete fallbackPatch.lot_id
+
+    result = await admin
+      .from('stock_movements')
+      .update(fallbackPatch)
+      .eq('id', movementId)
+  }
+
+  if (result.error) throw result.error
+}
+
 async function insertFallbackMovement(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   params: {
@@ -239,28 +291,22 @@ async function insertFallbackMovement(
     ? beforeQty - params.quantity
     : beforeQty + params.quantity
 
-  const { data, error } = await admin
-    .from('stock_movements')
-    .insert({
-      company_id: params.companyId,
-      product_id: params.product.id,
-      movement_type: params.movementType,
-      quantity: params.quantity,
-      unit_cost: params.unitCost,
-      reference_type: params.referenceType || 'manual',
-      reference_number: params.referenceNumber || null,
-      notes: params.notes,
-      created_by: params.createdBy,
-      created_by_name: params.creatorName,
-      stock_before: beforeQty,
-      stock_after: afterQty,
-      valuation_method: params.valuationMethod,
-      lot_code: params.lotCode,
-    })
-    .select('id')
-    .single()
-
-  if (error) throw error
+  const movementId = await insertStockMovementRecord(admin, {
+    company_id: params.companyId,
+    product_id: params.product.id,
+    movement_type: params.movementType,
+    quantity: params.quantity,
+    unit_cost: params.unitCost,
+    reference_type: params.referenceType || 'manual',
+    reference_number: params.referenceNumber || null,
+    notes: params.notes,
+    created_by: params.createdBy,
+    created_by_name: params.creatorName,
+    stock_before: beforeQty,
+    stock_after: afterQty,
+    valuation_method: params.valuationMethod,
+    lot_code: params.lotCode,
+  })
 
   const nextQty = Math.max(0, afterQty)
   const productPatch: Record<string, unknown> = { stock_quantity: nextQty }
@@ -270,7 +316,7 @@ async function insertFallbackMovement(
 
   await admin.from('products').update(productPatch).eq('id', params.product.id)
 
-  return data?.id || null
+  return movementId
 }
 
 async function processManualMovement(
@@ -330,13 +376,10 @@ async function processManualMovement(
 
       if (lotError) throw lotError
 
-      await admin
-        .from('stock_movements')
-        .update({
-          lot_id: lot?.id || null,
-          lot_code: fallbackCode,
-        })
-        .eq('id', movementId)
+      await updateStockMovementRecord(admin, movementId, {
+        lot_id: lot?.id || null,
+        lot_code: fallbackCode,
+      })
 
       if (valuationMethod === 'weighted_average') {
         const nextCost = computeMovingWeightedAverage(
@@ -389,14 +432,11 @@ async function processManualMovement(
       ? currentCost
       : (allocations.reduce((sum, allocation) => sum + (allocation.quantity * allocation.unitCost), 0) / params.quantity)
 
-    await admin
-      .from('stock_movements')
-      .update({
-        unit_cost: movementCost,
-        lot_id: allocations[0]?.lotId || null,
-        lot_code: allocations.map((allocation) => allocation.lotCode).join(', '),
-      })
-      .eq('id', movementId)
+    await updateStockMovementRecord(admin, movementId, {
+      unit_cost: movementCost,
+      lot_id: allocations[0]?.lotId || null,
+      lot_code: allocations.map((allocation) => allocation.lotCode).join(', '),
+    })
 
     const { error: allocationError } = await admin
       .from('stock_lot_consumptions')
