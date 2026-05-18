@@ -40,7 +40,7 @@ export default function StockPage() {
         .eq('track_stock', true)
         .eq('is_archived', false)
         .order('name'),
-      supabase.from('settings').select('inventory_method').eq('company_id', u.company_id).maybeSingle(),
+      supabase.from('settings').select('*').eq('company_id', u.company_id).maybeSingle(),
       supabase.from('stock_movements').select('id', { count:'exact', head:true }).eq('company_id', u.company_id),
       supabase.from('stock_lots').select('product_id,remaining_quantity,unit_cost').eq('company_id', u.company_id).gt('remaining_quantity', 0),
     ])

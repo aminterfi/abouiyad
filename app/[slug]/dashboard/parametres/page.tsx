@@ -56,9 +56,13 @@ export default function ParametresPage() {
     const { data: comp } = await supabase.from('companies').select('slug').eq('id', companyId).maybeSingle()
     
     if (data) {
-      setSettings({ ...data, slug: comp?.slug || '' })
+      setSettings({
+        ...data,
+        slug: comp?.slug || '',
+        inventory_method: normalizeStockMethod(data.inventory_method),
+      })
     } else {
-      const { data: created } = await supabase.from('settings').insert({
+      const baseInsert = {
         company_id: companyId,
         primary_color: '#2563EB',
         currency: 'DZD',
@@ -67,8 +71,21 @@ export default function ParametresPage() {
         font_size_base: 14,
         font_size_pdf: 12,
         inventory_method: 'fifo',
-      }).select().single()
-      if (created) setSettings({ ...created, slug: comp?.slug || '' })
+      }
+      let created: any = null
+      let insertResult = await supabase.from('settings').insert(baseInsert).select().single()
+      if (insertResult.error && /inventory_method|column/i.test(insertResult.error.message || '')) {
+        const { inventory_method, ...fallbackInsert } = baseInsert
+        insertResult = await supabase.from('settings').insert(fallbackInsert).select().single()
+      }
+      created = insertResult.data
+      if (created) {
+        setSettings({
+          ...created,
+          slug: comp?.slug || '',
+          inventory_method: normalizeStockMethod(created.inventory_method),
+        })
+      }
     }
     setLoading(false)
   }
@@ -94,7 +111,14 @@ export default function ParametresPage() {
       inventory_method: normalizeStockMethod(settings.inventory_method),
       updated_at: new Date().toISOString(),
     }
-    const { error } = await supabase.from('settings').update(payload).eq('company_id', user.company_id)
+    let error: any = null
+    let updateResult = await supabase.from('settings').update(payload).eq('company_id', user.company_id)
+    error = updateResult.error
+    if (error && /inventory_method|column/i.test(error.message || '')) {
+      const { inventory_method, ...fallbackPayload } = payload
+      updateResult = await supabase.from('settings').update(fallbackPayload).eq('company_id', user.company_id)
+      error = updateResult.error
+    }
     if (error) {
       alert('Erreur: ' + error.message)
     } else {

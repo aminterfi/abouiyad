@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BellRing, Package, Receipt, Users, WalletCards } from 'lucide-react'
+import { BellRing, HandCoins, Package, Receipt, Truck, Users, WalletCards } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -107,6 +107,8 @@ export default function ClientHomePage() {
             { href:`/${slug}/client/paiements`, label:'Paiements', meta:'Suivre les encaissements', icon: WalletCards },
             { href:`/${slug}/client/clients`, label:'Clients', meta:'Gerer les contacts factures', icon: Users },
             { href:`/${slug}/client/produits`, label:'Produits', meta:'Catalogue commercial', icon: Package },
+            { href:`/${slug}/client/fournisseurs`, label:'Fournisseurs', meta:'Contacts d achat', icon: Truck },
+            { href:`/${slug}/client/depenses`, label:'Depenses', meta:'Suivi des sorties', icon: HandCoins },
             { href:`/${slug}/client/demandes`, label:'Demandes', meta:`${stats.demandes} demande(s)`, icon: BellRing },
             { href:`/${slug}/client/stock`, label:'Stock', meta:'Pilotage inventaire', icon: Package },
           ].map((item) => {

@@ -83,6 +83,7 @@ export default function StockAchatsPage() {
   const { slug } = useParams() as { slug: string }
   const aiFileInputRef = useRef<HTMLInputElement | null>(null)
   const [products, setProducts] = useState<ProductOption[]>([])
+  const [suppliers, setSuppliers] = useState<any[]>([])
   const [purchases, setPurchases] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -111,7 +112,7 @@ export default function StockAchatsPage() {
       return
     }
 
-    const [{ data: productRows }, { data: purchaseRows }] = await Promise.all([
+    const [{ data: productRows }, { data: purchaseRows }, { data: supplierRows }] = await Promise.all([
       supabase
         .from('products')
         .select('id,name,unit,is_stockable,track_stock')
@@ -126,10 +127,17 @@ export default function StockAchatsPage() {
         .eq('company_id', user.company_id)
         .order('created_at', { ascending: false })
         .limit(20),
+      supabase
+        .from('suppliers')
+        .select('id,name,default_currency')
+        .eq('company_id', user.company_id)
+        .eq('is_archived', false)
+        .order('name'),
     ])
 
     setProducts(productRows || [])
     setPurchases(purchaseRows || [])
+    setSuppliers(supplierRows || [])
     setLoading(false)
   }
 
@@ -386,6 +394,16 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
       return
     }
 
+    const matchingSupplier = suppliers.find((row) => String(row.name || '').trim().toLowerCase() === supplierName.trim().toLowerCase())
+    if (!matchingSupplier) {
+      await supabase.from('suppliers').insert({
+        company_id: user.company_id,
+        created_by: user.id,
+        name: supplierName.trim(),
+        default_currency: currency || 'DZD',
+      })
+    }
+
     setMessage(mode === 'import'
       ? 'Bon d achat importation enregistre. Les frais ont ete integres dans le cout des lots.'
       : 'Bon d achat simple enregistre.')
@@ -497,7 +515,13 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={lbl}>Fournisseur</label>
-            <input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="Nom du fournisseur" style={inp} />
+            <input list="supplier-options" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="Nom du fournisseur" style={inp} />
+            <datalist id="supplier-options">
+              {suppliers.map((item) => <option key={item.id} value={item.name} />)}
+            </datalist>
+            <div style={{ fontSize: 11, color: '#6b6860', marginTop: 6 }}>
+              Suggestions depuis votre annuaire fournisseurs. Les nouveaux noms seront ajoutes automatiquement a la validation.
+            </div>
           </div>
           <div>
             <label style={lbl}>Reference</label>
@@ -521,6 +545,9 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         <div>
           <label style={lbl}>Notes</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Transport, douane, precisions fournisseur..." style={{ ...inp, resize: 'vertical' }} />
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12 }}>
+          <Link href={`/${slug}/dashboard/fournisseurs`} style={{ color: '#2563EB', textDecoration: 'none', fontWeight: 600 }}>Gerer les fournisseurs</Link>
         </div>
       </div>
 

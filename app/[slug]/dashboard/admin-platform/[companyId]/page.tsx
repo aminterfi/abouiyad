@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { getCommercialDocumentMeta, getDeclarationMeta } from '@/lib/commercial-documents'
+import { BUSINESS_MODULES } from '@/lib/business-modules'
 
 function dzd(v:number){return (v||0).toLocaleString('fr-DZ',{minimumFractionDigits:0})+' DZD'}
 
@@ -221,7 +222,7 @@ export default function CompanyDetailPage() {
   const lbl:React.CSSProperties = {fontSize:11,color:muted,marginBottom:6,fontWeight:700,display:'block'}
   const card:React.CSSProperties = {background:panel,border:`1px solid ${border}`,borderRadius:12,padding:20,marginBottom:14,color:text}
   const sectionTitle:React.CSSProperties = {fontSize:11,fontWeight:800,color:faint,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:14,display:'flex',alignItems:'center',gap:8}
-  const moduleOptions = ['dashboard','billing','clients','payments','catalog','stock','tickets','service_requests','documents','users','settings']
+  const moduleOptions = [...BUSINESS_MODULES]
 
   return (
     <div style={{color:text}}>

@@ -1,3 +1,5 @@
+import { BUSINESS_MODULES } from '@/lib/business-modules'
+
 export type WorkspaceType = 'cabinet' | 'client'
 export type ShellKey = 'admin-rs' | 'cabinet' | 'client'
 export const MANAGEMENT_SLUG = 'rs'
@@ -21,19 +23,7 @@ export type WorkspaceSession = {
   active_slug: string | null
 }
 
-export const DEFAULT_CLIENT_MODULES = [
-  'dashboard',
-  'billing',
-  'clients',
-  'payments',
-  'catalog',
-  'stock',
-  'tickets',
-  'service_requests',
-  'documents',
-  'users',
-  'settings',
-] as const
+export const DEFAULT_CLIENT_MODULES = BUSINESS_MODULES
 
 export function isManagementSlug(slug: string | null | undefined): boolean {
   return String(slug || '').trim().toLowerCase() === MANAGEMENT_SLUG
