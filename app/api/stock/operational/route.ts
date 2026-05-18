@@ -23,6 +23,7 @@ type StockPayload = {
   }>
   purchaseType?: 'simple' | 'import'
   currency?: string | null
+  supplierId?: string | null
   supplierName?: string
   referenceNumber?: string | null
   purchaseDate?: string | null
@@ -449,6 +450,7 @@ async function processPurchaseReceipt(
     creatorName: string
     purchaseType: 'simple' | 'import'
     currency: string
+    supplierId: string | null
     supplierName: string
     referenceNumber: string | null
     purchaseDate: string | null
@@ -521,25 +523,47 @@ async function processPurchaseReceipt(
   let purchaseDocumentId: string | null = null
 
   try {
-    const { data: purchaseDocument, error: documentError } = await admin
-      .from('purchase_documents')
-      .insert({
-        company_id: params.companyId,
-        supplier_name: params.supplierName,
-        document_kind: params.purchaseType,
-        reference_number: params.referenceNumber,
-        purchase_date: receivedAt,
-        notes: params.notes,
-        currency: params.currency,
-        extra_costs_total: extraCostsTotal,
-        subtotal,
-        grand_total: grandTotal,
-        status: 'received',
-        created_by: params.createdBy,
-        created_by_name: params.creatorName,
-      })
-      .select('id')
-      .single()
+    const insertPayload = {
+      company_id: params.companyId,
+      supplier_id: params.supplierId,
+      supplier_name: params.supplierName,
+      document_kind: params.purchaseType,
+      reference_number: params.referenceNumber,
+      purchase_date: receivedAt,
+      notes: params.notes,
+      currency: params.currency,
+      extra_costs_total: extraCostsTotal,
+      subtotal,
+      grand_total: grandTotal,
+      status: 'received',
+      created_by: params.createdBy,
+      created_by_name: params.creatorName,
+    }
+
+    let purchaseDocument: { id?: string } | null = null
+    let documentError: unknown = null
+
+    {
+      const result = await admin
+        .from('purchase_documents')
+        .insert(insertPayload)
+        .select('id')
+        .single()
+
+      purchaseDocument = result.data
+      documentError = result.error
+    }
+
+    if (documentError && isSchemaFallbackError(getErrorMessage(documentError))) {
+      const { supplier_id, ...fallbackPayload } = insertPayload
+      const fallbackResult = await admin
+        .from('purchase_documents')
+        .insert(fallbackPayload)
+        .select('id')
+        .single()
+      purchaseDocument = fallbackResult.data
+      documentError = fallbackResult.error
+    }
 
     if (documentError) throw documentError
     purchaseDocumentId = purchaseDocument?.id || null
@@ -709,6 +733,7 @@ export async function POST(request: Request) {
     if (kind === 'purchase_receipt') {
       const purchaseType = body.purchaseType === 'import' ? 'import' : 'simple'
       const currency = String(body.currency || '').trim().toUpperCase() || 'DZD'
+      const supplierId = String(body.supplierId || '').trim() || null
       const supplierName = String(body.supplierName || '').trim()
       const referenceNumber = String(body.referenceNumber || '').trim() || null
       const purchaseDate = String(body.purchaseDate || '').trim() || null
@@ -739,6 +764,7 @@ export async function POST(request: Request) {
         creatorName,
         purchaseType,
         currency,
+        supplierId,
         supplierName,
         referenceNumber,
         purchaseDate,

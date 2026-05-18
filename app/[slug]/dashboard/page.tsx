@@ -122,9 +122,12 @@ export default function Dashboard() {
     impaye: 0, factPending: 0, taux: 0,
     factures: 0, partielles: 0, impayees: 0, payees: 0,
     caTotal: 0, encaisseTotal: 0, paiementsCount: 0, ticketMoyen: 0,
+    suppliersTotal: 0, expensesTotal: 0, expensesPending: 0, purchasesTotal: 0,
   })
   const [recentBills, setRecentBills] = useState<any[]>([])
   const [recentPayments, setRecentPayments] = useState<any[]>([])
+  const [recentExpenses, setRecentExpenses] = useState<any[]>([])
+  const [recentPurchases, setRecentPurchases] = useState<any[]>([])
   const [monthlyRev, setMonthlyRev] = useState<number[]>([])
   const [monthlyLabels, setMonthlyLabels] = useState<string[]>([])
   const [topClients, setTopClients] = useState<any[]>([])
@@ -144,7 +147,7 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', check)
   }, [period])
 
-  useRealtime(['bills', 'payments', 'clients', 'products', 'bill_items'], fetchAll)
+  useRealtime(['bills', 'payments', 'clients', 'products', 'bill_items', 'suppliers', 'expenses', 'purchase_documents'], fetchAll)
 
   async function fetchAll() {
     const now = new Date()
@@ -165,16 +168,21 @@ export default function Dashboard() {
 
     const u = JSON.parse(localStorage.getItem('user')||'{}')
     if (!u.company_id) return
-    const [{ data: allBills },{ data: allPayments },{ data: allClients },{ data: recentBs },{ data: recentPs }] = await Promise.all([
+    const [{ data: allBills },{ data: allPayments },{ data: allClients },{ data: recentBs },{ data: recentPs },{ count: suppliersCount },{ data: allExpenses },{ data: recentExp },{ data: recentPur }] = await Promise.all([
       supabase.from('bills').select('*, clients(full_name)').eq('company_id', u.company_id).eq('is_archived', false),
       supabase.from('payments').select('*').eq('company_id', u.company_id),
       supabase.from('clients').select('*').eq('company_id', u.company_id).eq('is_archived', false),
       supabase.from('bills').select('*, clients(full_name)').eq('company_id', u.company_id).eq('is_archived', false).order('created_at', { ascending: false }).limit(3),
-      supabase.from('payments').select('*, bills(invoice_number, clients(full_name))').eq('company_id', u.company_id).order('created_at', { ascending: false }).limit(3)
+      supabase.from('payments').select('*, bills(invoice_number, clients(full_name))').eq('company_id', u.company_id).order('created_at', { ascending: false }).limit(3),
+      supabase.from('suppliers').select('*', { count:'exact', head:true }).eq('company_id', u.company_id).eq('is_archived', false),
+      supabase.from('expenses').select('*, suppliers(name)').eq('company_id', u.company_id),
+      supabase.from('expenses').select('*, suppliers(name)').eq('company_id', u.company_id).order('expense_date', { ascending: false }).limit(3),
+      supabase.from('purchase_documents').select('supplier_name,grand_total,currency,purchase_date,document_kind').eq('company_id', u.company_id).order('created_at', { ascending: false }).limit(3),
     ])
 
     const bills = allBills || []
     const payments = allPayments || []
+    const expenses = allExpenses || []
     const periodPayments = payments.filter((p:any) => new Date(p.created_at) >= startDate)
     const caPeriod = periodPayments.reduce((s,p:any) => s + p.amount, 0)
     const prevPayments = payments.filter((p:any) => {
@@ -186,6 +194,9 @@ export default function Dashboard() {
     const caTotal = bills.reduce((s,b:any) => s + (b.total_amount||0), 0)
     const encaisseTotal = bills.reduce((s,b:any) => s + (b.paid_amount||0), 0)
     const impaye = caTotal - encaisseTotal
+    const expensesTotal = expenses.reduce((sum:any, row:any) => sum + Number(row.total_amount || 0), 0)
+    const expensesPending = expenses.filter((row:any) => row.payment_status !== 'paid').reduce((sum:any, row:any) => sum + Number(row.total_amount || 0), 0)
+    const purchasesTotal = (recentPur || []).reduce((sum:any, row:any) => sum + Number(row.grand_total || 0), 0)
     const taux = caTotal > 0 ? Math.round((encaisseTotal / caTotal) * 100) : 0
     const factPending = bills.filter((b:any) => b.status !== 'payé').length
     const partielles = bills.filter((b:any) => b.status === 'partiel').length
@@ -223,9 +234,15 @@ export default function Dashboard() {
       caTotal, encaisseTotal,
       paiementsCount: payments.length,
       ticketMoyen: payments.length ? encaisseTotal / payments.length : 0,
+      suppliersTotal: suppliersCount || 0,
+      expensesTotal,
+      expensesPending,
+      purchasesTotal,
     })
     setRecentBills(recentBs || [])
     setRecentPayments(recentPs || [])
+    setRecentExpenses(recentExp || [])
+    setRecentPurchases(recentPur || [])
     setMonthlyRev(monthly)
     setMonthlyLabels(labels)
     setTopClients(tops)
@@ -291,6 +308,10 @@ export default function Dashboard() {
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}/>
         <KpiCard isMobile={isMobile} label="Recouvrement" value={`${data.taux}%`} color="#7c3aed" sub={data.taux>70?'Excellent':data.taux>40?'Correct':'À améliorer'}
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>}/>
+        <KpiCard isMobile={isMobile} label="Fournisseurs" value={data.suppliersTotal} color="#2563EB" sub="annuaire achat"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>}/>
+        <KpiCard isMobile={isMobile} label="Dépenses" value={dzdS(data.expensesTotal)} color="#dc2626" sub={`reste ${dzdS(data.expensesPending)}`}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H6"/></svg>}/>
       </div>
 
       <div style={{marginBottom:20}}>
@@ -324,6 +345,9 @@ export default function Dashboard() {
             { label:'Nouvelle facture', href:`/${slug}/dashboard/factures/nouvelle`, color:'#2563EB', icon:'📄' },
             { label:'Nouveau client', href:`/${slug}/dashboard/clients`, color:'#16a34a', icon:'👥' },
             { label:'Encaisser', href:`/${slug}/dashboard/factures`, color:'#d97706', icon:'💰' },
+            { label:'Achats', href:`/${slug}/dashboard/stock/achats`, color:'#0f766e', icon:'🧾' },
+            { label:'Fournisseurs', href:`/${slug}/dashboard/fournisseurs`, color:'#2563EB', icon:'🚚' },
+            { label:'Dépenses', href:`/${slug}/dashboard/depenses`, color:'#dc2626', icon:'💸' },
             { label:'Produits', href:`/${slug}/dashboard/produits`, color:'#7c3aed', icon:'📦' },
           ].map(item => (
             <Link key={item.label} href={item.href}
@@ -383,6 +407,57 @@ export default function Dashboard() {
                   <div style={{fontSize:10,color:'#a8a69e',marginTop:2}}>{p.method} · {new Date(p.created_at).toLocaleDateString('fr-DZ')}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:700,fontFamily:'JetBrains Mono,monospace',color:'#16a34a'}}>+{dzdS(p.amount)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:16,marginBottom:20}}>
+        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden'}}>
+          <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{fontSize:14,fontWeight:700}}>Derniers achats fournisseurs</div>
+            <Link href={`/${slug}/dashboard/stock/achats`} style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tout voir →</Link>
+          </div>
+          <div>
+            {recentPurchases.length === 0 ? (
+              <div style={{textAlign:'center',padding:30,color:'#a8a69e',fontSize:13}}>
+                <div style={{fontSize:30,marginBottom:8}}>🧾</div>Aucun achat
+              </div>
+            ) : recentPurchases.map((purchase:any, index:number) => (
+              <div key={`${purchase.supplier_name}-${index}`} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderBottom:index<recentPurchases.length-1?'1px solid rgba(0,0,0,0.04)':'none'}}>
+                <div style={{width:36,height:36,borderRadius:10,background:'rgba(15,118,110,0.1)',color:'#0f766e',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,flexShrink:0}}>A</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{purchase.supplier_name}</div>
+                  <div style={{fontSize:10,color:'#a8a69e',marginTop:2}}>{purchase.document_kind} · {new Date(purchase.purchase_date).toLocaleDateString('fr-DZ')}</div>
+                </div>
+                <div style={{fontSize:13,fontWeight:700,fontFamily:'JetBrains Mono,monospace',color:'#0f766e'}}>{dzdS(purchase.grand_total || 0)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{background:'#fff',border:'1px solid rgba(0,0,0,0.05)',borderRadius:16,overflow:'hidden'}}>
+          <div style={{padding:'16px 18px',borderBottom:'1px solid rgba(0,0,0,0.05)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{fontSize:14,fontWeight:700}}>Dernières dépenses</div>
+            <Link href={`/${slug}/dashboard/depenses`} style={{fontSize:11,color:'#2563EB',textDecoration:'none',fontWeight:600}}>Tout voir →</Link>
+          </div>
+          <div>
+            {recentExpenses.length === 0 ? (
+              <div style={{textAlign:'center',padding:30,color:'#a8a69e',fontSize:13}}>
+                <div style={{fontSize:30,marginBottom:8}}>💸</div>Aucune dépense
+              </div>
+            ) : recentExpenses.map((expense:any, index:number) => (
+              <div key={expense.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderBottom:index<recentExpenses.length-1?'1px solid rgba(0,0,0,0.04)':'none'}}>
+                <div style={{width:36,height:36,borderRadius:10,background:'rgba(220,38,38,0.08)',color:'#dc2626',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,flexShrink:0}}>D</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{expense.description}</div>
+                  <div style={{fontSize:10,color:'#a8a69e',marginTop:2}}>{expense.suppliers?.name || 'Sans fournisseur'} · {new Date(expense.expense_date).toLocaleDateString('fr-DZ')}</div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:13,fontWeight:700,fontFamily:'JetBrains Mono,monospace',color:'#dc2626'}}>{dzdS(expense.total_amount || 0)}</div>
+                  <div style={{fontSize:10,color:expense.payment_status === 'paid' ? '#16a34a' : '#d97706',marginTop:2}}>{expense.payment_status === 'paid' ? 'Payée' : 'En attente'}</div>
+                </div>
               </div>
             ))}
           </div>

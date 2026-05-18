@@ -57,6 +57,12 @@ create index if not exists idx_expenses_company_date
 create index if not exists idx_expenses_company_supplier
   on public.expenses(company_id, supplier_id);
 
+alter table if exists public.purchase_documents
+  add column if not exists supplier_id uuid references public.suppliers(id) on delete set null;
+
+create index if not exists idx_purchase_documents_company_supplier
+  on public.purchase_documents(company_id, supplier_id, created_at desc);
+
 alter table if exists public.suppliers enable row level security;
 alter table if exists public.expenses enable row level security;
 

@@ -94,6 +94,7 @@ export default function StockAchatsPage() {
   const [aiSummary, setAiSummary] = useState('')
   const [aiFileName, setAiFileName] = useState('')
   const [mode, setMode] = useState<PurchaseMode>('simple')
+  const [supplierId, setSupplierId] = useState('')
   const [supplierName, setSupplierName] = useState('')
   const [referenceNumber, setReferenceNumber] = useState('')
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
@@ -284,8 +285,10 @@ export default function StockAchatsPage() {
 
   async function applyExtraction(extraction: ScannedPurchasePayload) {
     const hydratedExtraction = await ensureScannedProducts(extraction)
+    const matchedSupplier = suppliers.find((item) => String(item.name || '').trim().toLowerCase() === String(hydratedExtraction.supplierName || '').trim().toLowerCase())
     const nextMode: PurchaseMode = 'simple'
     setMode(nextMode)
+    setSupplierId(matchedSupplier?.id || '')
     setSupplierName(hydratedExtraction.supplierName || '')
     setReferenceNumber(hydratedExtraction.referenceNumber || '')
     setPurchaseDate(hydratedExtraction.purchaseDate || new Date().toISOString().slice(0, 10))
@@ -363,6 +366,39 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
       return
     }
 
+    let resolvedSupplierId = supplierId || null
+    let resolvedSupplierName = supplierName.trim()
+
+    if (!resolvedSupplierName) {
+      setError('Ajoutez un fournisseur et au moins une ligne valide.')
+      setSaving(false)
+      return
+    }
+
+    if (!resolvedSupplierId) {
+      const existingSupplier = suppliers.find((row) => String(row.name || '').trim().toLowerCase() === resolvedSupplierName.toLowerCase())
+      resolvedSupplierId = existingSupplier?.id || null
+      if (!resolvedSupplierId) {
+        const { data: createdSupplier, error: createSupplierError } = await supabase
+          .from('suppliers')
+          .insert({
+            company_id: user.company_id,
+            created_by: user.id,
+            name: resolvedSupplierName,
+            default_currency: currency || 'DZD',
+          })
+          .select('id,name')
+          .single()
+
+        if (createSupplierError) {
+          setError(createSupplierError.message)
+          setSaving(false)
+          return
+        }
+        resolvedSupplierId = createdSupplier?.id || null
+      }
+    }
+
     const response = await fetch('/api/stock/operational', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -373,7 +409,8 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         creatorEmail: user.email,
         purchaseType: mode,
         currency,
-        supplierName: supplierName.trim(),
+        supplierId: resolvedSupplierId,
+        supplierName: resolvedSupplierName,
         referenceNumber: referenceNumber.trim() || null,
         purchaseDate,
         extraCosts: mode === 'import'
@@ -394,19 +431,10 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
       return
     }
 
-    const matchingSupplier = suppliers.find((row) => String(row.name || '').trim().toLowerCase() === supplierName.trim().toLowerCase())
-    if (!matchingSupplier) {
-      await supabase.from('suppliers').insert({
-        company_id: user.company_id,
-        created_by: user.id,
-        name: supplierName.trim(),
-        default_currency: currency || 'DZD',
-      })
-    }
-
     setMessage(mode === 'import'
       ? 'Bon d achat importation enregistre. Les frais ont ete integres dans le cout des lots.'
       : 'Bon d achat simple enregistre.')
+    setSupplierId('')
     setSupplierName('')
     setReferenceNumber('')
     setCurrency('DZD')
@@ -515,12 +543,34 @@ async function handleAiFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={lbl}>Fournisseur</label>
-            <input list="supplier-options" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="Nom du fournisseur" style={inp} />
+            <select
+              value={supplierId}
+              onChange={(e) => {
+                const nextId = e.target.value
+                const selectedSupplier = suppliers.find((row) => row.id === nextId)
+                setSupplierId(nextId)
+                if (selectedSupplier) {
+                  setSupplierName(selectedSupplier.name)
+                  if (mode === 'import' && selectedSupplier.default_currency) {
+                    setCurrency(selectedSupplier.default_currency)
+                  }
+                }
+              }}
+              style={{ ...inp, marginBottom: 8 }}
+            >
+              <option value="">Selectionner un fournisseur existant</option>
+              {suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <input list="supplier-options" value={supplierName} onChange={(e) => {
+              setSupplierName(e.target.value)
+              const matchedSupplier = suppliers.find((row) => String(row.name || '').trim().toLowerCase() === e.target.value.trim().toLowerCase())
+              setSupplierId(matchedSupplier?.id || '')
+            }} placeholder="Nom du fournisseur" style={inp} />
             <datalist id="supplier-options">
               {suppliers.map((item) => <option key={item.id} value={item.name} />)}
             </datalist>
             <div style={{ fontSize: 11, color: '#6b6860', marginTop: 6 }}>
-              Suggestions depuis votre annuaire fournisseurs. Les nouveaux noms seront ajoutes automatiquement a la validation.
+              Selection rapide depuis votre annuaire fournisseurs. Un nouveau nom sera cree automatiquement si besoin.
             </div>
           </div>
           <div>
